@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,18 +20,22 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://synedrix.vercel.ap
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0f172a",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: "Study OS — AI-Powered Learning Operating System",
-    template: "%s | Study OS",
+    default: "Synedrix — The Personal Learning Operating System",
+    template: "%s | Synedrix",
   },
   description:
-    "Study OS unifies curriculum mapping, AI tutoring, practice generation, and spaced repetition into a single state-driven learning platform for German Gymnasium students.",
+    "Synedrix unifies the curriculum map, knowledge workspace, AI tutor, practice engine, and spaced repetition into one state-driven loop. Built for German Gymnasium students and the open-source community.",
   keywords: [
+    "Synedrix",
     "AI tutor",
     "spaced repetition",
     "study app",
@@ -43,6 +48,9 @@ export const metadata: Metadata = {
     "curriculum mapping",
     "mistake journal",
     "flashcard app",
+    "Convex",
+    "OpenRouter",
+    "open source study app",
   ],
   authors: [{ name: "Ahmet Cetin" }],
   creator: "Ahmet Cetin",
@@ -50,8 +58,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    siteName: "Study OS",
-    title: "Study OS — AI-Powered Learning Operating System",
+    siteName: "Synedrix",
+    title: "Synedrix — The Personal Learning Operating System",
     description:
       "Five systems, one state. From 'I don't get this' to 'I can solve this alone.'",
     url: BASE_URL,
@@ -60,13 +68,13 @@ export const metadata: Metadata = {
         url: "/synedrix-github-banner.png",
         width: 1200,
         height: 630,
-        alt: "Study OS — The personal learning operating system",
+        alt: "Synedrix — the personal learning operating system",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Study OS — AI-Powered Learning Operating System",
+    title: "Synedrix — The Personal Learning Operating System",
     description:
       "Five systems, one state. From 'I don't get this' to 'I can solve this alone.'",
     images: ["/synedrix-github-banner.png"],
@@ -100,9 +108,31 @@ export default function RootLayout({
       <html
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+        suppressHydrationWarning
       >
+        <head>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                try {
+                  var t = localStorage.getItem("theme");
+                  var d = document.documentElement;
+                  if (t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+                    d.setAttribute("data-theme", "dark");
+                    d.style.colorScheme = "dark";
+                  } else {
+                    d.setAttribute("data-theme", "light");
+                    d.style.colorScheme = "light";
+                  }
+                } catch(e) {}
+              `,
+            }}
+          />
+        </head>
         <body className="min-h-full flex flex-col">
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ThemeProvider>
+            <ConvexClientProvider>{children}</ConvexClientProvider>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>
