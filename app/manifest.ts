@@ -2,14 +2,14 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Study OS",
-    short_name: "Study OS",
+    name: "Synedrix, The Personal Learning Operating System",
+    short_name: "Synedrix",
     description:
-      "AI-powered personal learning operating system for German Gymnasium students.",
+      "Five systems, one state. The personal learning operating system for German Gymnasium students.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0f172a",
-    theme_color: "#0f172a",
+    background_color: "#fafafa",
+    theme_color: "#0d9488",
     icons: [
       {
         src: "/favicon.ico",
