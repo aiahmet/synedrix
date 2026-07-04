@@ -1,6 +1,6 @@
 # Study OS — Product and Engineering Specification
 
-> **Stack:** Next.js 16 (App Router) · TypeScript · PostgreSQL via Prisma · Tailwind CSS v4 · OpenRouter via the Vercel AI SDK
+> **Stack:** Next.js 16 (App Router) · TypeScript · Convex · Tailwind CSS v4 · OpenRouter via the Vercel AI SDK · Clerk
 > **Scope:** Single-user v1, built for one Gymnasium student preparing for grade 12 (Oberstufe)
 
 *The whole point: one tab, five hours, everything you need to go from "I don't get this" to "I can solve this alone."*
@@ -249,8 +249,8 @@ app/
       flashcards/route.ts
       plan/route.ts
       quiz/route.ts
-    auth/
-      [...all]/route.ts
+    webhooks/
+      clerk/route.ts        # Clerk webhook for user sync
 ```
 
 ## 9. Tech Stack
@@ -264,8 +264,8 @@ app/
 - **Lucide** for icons.
 - **TanStack Query** for server state; **Zustand** for local UI state.
 - **React Hook Form + Zod** for forms.
-- **Prisma + PostgreSQL** as the primary datastore. (Drizzle is a fine lighter-weight alternative if you'd rather define schema in SQL-shaped TypeScript — either pairs fine with the auth library below.)
-- **Better Auth** for authentication. It's self-hosted, keeps session data in your own Postgres instance, has no per-user billing, and is the stronger default for a new Next.js project in 2026 — Auth.js (formerly NextAuth) is now organizationally part of Better Auth and is effectively legacy for greenfield projects, even though it's still fine on existing ones. Reach for an Auth.js adapter only if you need one of its long-tail OAuth providers.
+- **Convex** as the primary datastore and backend platform. Convex provides a realtime database with built-in TypeScript schema validation, reactive queries, server functions (queries, mutations, actions), file storage, text/vector search, function scheduling, and automatic end-to-end type safety — all without managing a separate database server. Data is defined via `convex/schema.ts` using the `convex/server` schema builder. See Section 10 for the schema.
+- **Clerk** for authentication. Clerk provides a managed auth UI, session management, user storage, social OAuth, MFA, passkeys, and webhooks — all integrated with Convex's auth provider system via `convex/auth.config.ts`. Use `@clerk/nextjs` for the Next.js SDK and `convex/react-clerk` for the Convex bridge (`ConvexProviderWithClerk`). For Next.js 16, auth middleware goes in `proxy.ts` using `clerkMiddleware()`.
 - **Vercel Blob** or an S3-compatible bucket for attachments.
 - **OpenRouter**, called through the **Vercel AI SDK** (`ai`) with the **`@openrouter/ai-sdk-provider`** community provider — not a hand-rolled `fetch` client. This buys streaming, retries, and typed structured output (`generateObject` / `streamObject` against a Zod schema) instead of you reimplementing them. See Section 12.
 
@@ -317,106 +317,20 @@ One name per concept, used consistently everywhere. The biggest failure mode in 
 - A `MistakeEntry` can link to a topic, a `StudySession`, and a `PracticeAttempt`, but doesn't require any of them.
 - A `TutorThread` belongs to a user and is optionally scoped to a subject or topic.
 
-### Schema sketch
-Not final schema code — enough to lock down naming and shape.
+### Schema
+Defined in `convex/schema.ts` using Convex's `defineSchema` and `defineTable` with `v` validators. Tables are defined with their fields and indexes — Convex enforces the schema at runtime and provides end-to-end TypeScript types. All tables get `_id` (auto-generated document ID) and `_creationTime` (auto-timestamp) automatically.
 
-```prisma
-model Topic {
-  id             String   @id @default(cuid())
-  chapterId      String
-  chapter        Chapter  @relation(fields: [chapterId], references: [id])
-  title          String
-  objectives     String[]
-  examRelevance  Int      // 0-100
-  difficulty     Difficulty
-  lessonBlocks   LessonBlock[]
-  practiceSets   PracticeSet[]
-  flashcardDecks FlashcardDeck[]
-  progress       UserTopicProgress[]
-}
-
-model TopicPrerequisite {
-  id                  String @id @default(cuid())
-  topicId             String
-  prerequisiteTopicId String
-}
-
-model UserTopicProgress {
-  id           String    @id @default(cuid())
-  userId       String
-  topicId      String
-  mastery      Float     @default(0) // 0-1
-  confidence   Float     @default(0) // 0-1, self-rated
-  timeSpentSec Int       @default(0)
-  lastStudied  DateTime?
-  user         User      @relation(fields: [userId], references: [id])
-  topic        Topic     @relation(fields: [topicId], references: [id])
-
-  @@unique([userId, topicId])
-}
-
-model MistakeEntry {
-  id                String        @id @default(cuid())
-  userId            String
-  topicId           String?
-  practiceAttemptId String?
-  question          String
-  userAnswer        String
-  correctAnswer     String
-  mistakeType       MistakeType
-  cause             String?
-  recoveryAction    String?
-  reviewAt          DateTime?
-  createdAt         DateTime      @default(now())
-}
-
-model FlashcardReview {
-  id           String        @id @default(cuid())
-  userId       String
-  flashcardId  String
-  ease         Float         @default(2.5)
-  intervalDays Int           @default(1)
-  dueAt        DateTime
-  lastResult   ReviewResult?
-
-  @@unique([userId, flashcardId])
-}
-
-model AiGeneration {
-  id           String   @id @default(cuid())
-  userId       String
-  task         String   // "explain-topic" | "generate-quiz" | "evaluate-answer" | ...
-  model        String
-  inputTokens  Int
-  outputTokens Int
-  latencyMs    Int
-  schemaValid  Boolean
-  relatedId    String?  // topicId, practiceSetId, etc., depending on task
-  createdAt    DateTime @default(now())
-}
-
-enum Difficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
-enum MistakeType {
-  CONCEPT_MISUNDERSTANDING
-  CALCULATION_MISTAKE
-  CARELESS_ERROR
-  FORMULA_RECALL_FAILURE
-  MISREAD_QUESTION
-  LANGUAGE_EXPRESSION_ISSUE
-}
-
-enum ReviewResult {
-  AGAIN
-  HARD
-  GOOD
-  EASY
-}
+```txt
+Tables (all in convex/schema.ts):
+  subjects, chapters, topics, topicPrerequisites, lessonBlocks
+  users, userTopicProgress, notes, studySessions, goals
+  practiceSets, practiceItems, practiceAttempts
+  flashcardDecks, flashcards, flashcardReviews
+  mistakeEntries, tutorThreads, tutorMessages
+  aiGenerations, attachments
 ```
+
+Each table uses `v.id(...)` for foreign-key-style references. Enums are represented as `v.union(v.literal(...))`. Indexes use `.index("name", ["field"])` on table definitions. See `convex/schema.ts` for the complete definition.
 
 ### Data modeling notes
 - Keep canonical curriculum content separate from user progress (see above) — the single most important modeling decision in the app.
@@ -675,9 +589,9 @@ V1 is single-user, but the codebase shouldn't paint itself into a corner. Model 
 | Tutor | Modeled, unused |
 | Admin | Modeled, unused |
 
-V1 practical scope: email login via Better Auth (Section 9), optional OAuth, one personal workspace, account settings, data export, delete account.
+V1 practical scope: email login via Clerk (Section 9), optional OAuth (Google, GitHub, etc.), one personal workspace, account settings, data export, account deletion.
 
-**Don't rely on `proxy.ts` alone to gate access to a page.** Network-boundary-only session checks have a real history of bypass bugs in Next.js (header-spoofing style attacks against middleware-based auth). Re-verify the session inside the server component or route handler that actually reads or writes data — treat `proxy.ts` as a fast, first-pass redirect, not the security boundary.
+**Don't rely on `proxy.ts` alone to gate access to a page.** Network-boundary-only session checks have a real history of bypass bugs in Next.js (header-spoofing style attacks against middleware-based auth). Re-verify the session inside the server component or route handler that actually reads or writes data — treat `proxy.ts` as a fast, first-pass redirect, not the security boundary. Clerk's `clerkMiddleware()` in `proxy.ts` handles first-pass protection; use `auth()` or `currentUser()` from `@clerk/nextjs/server` inside Server Components and Route Handlers for re-verification.
 
 ## 17. Engineering Standards
 
@@ -696,19 +610,22 @@ Next.js 16 ships an `AGENTS.md` convention in `create-next-app` and a DevTools M
 
 **Environments** — local, preview, production.
 
-**Deployment target** — Vercel is the easiest fit for Next.js 16; Postgres on Neon, Supabase, or Railway.
+**Deployment target** — Vercel is the easiest fit for Next.js 16 and Convex. Convex handles backend hosting; Vercel handles the frontend.
 
 **Environment variables**
 
 ```bash
-# Database
-DATABASE_URL=
+# Convex
+NEXT_PUBLIC_CONVEX_URL=
+CLERK_JWT_ISSUER_DOMAIN=
 
-# Auth (Better Auth)
-BETTER_AUTH_SECRET=
-BETTER_AUTH_URL=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
+# Clerk
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 
 # AI
 OPENROUTER_API_KEY=
@@ -719,7 +636,6 @@ AI_TELEMETRY_ENABLED=true
 # Observability & storage
 POSTHOG_KEY=
 SENTRY_DSN=
-BLOB_READ_WRITE_TOKEN=
 ```
 
 ## 19. Roadmap
@@ -748,6 +664,13 @@ The differentiator isn't "AI for studying" — everyone's building that. It's a 
 
 **Internal modules**
 ```txt
+convex/schema.ts                       # Database schema (Convex tables + indexes)
+convex/auth.config.ts                  # Clerk JWT auth provider config
+convex/curriculum/                     # Curriculum queries & mutations
+convex/practice/                       # Practice engine functions
+convex/review/                         # Spaced repetition functions
+convex/analytics/                      # Progress & insights functions
+convex/users.ts                        # User management functions
 src/lib/ai/provider.ts
 src/lib/ai/tasks/generate-quiz.ts
 src/lib/ai/tasks/explain-topic.ts
