@@ -1,65 +1,80 @@
-import Image from "next/image";
+import { Suspense } from "react";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+import { ArchitectureSection } from "@/components/landing/ArchitectureSection";
+import { ContributingSection } from "@/components/landing/ContributingSection";
+import { DataModel } from "@/components/landing/DataModel";
+import { DesignSection } from "@/components/landing/DesignSection";
+import { FaqSection } from "@/components/landing/FaqSection";
+import { FinalCTA } from "@/components/landing/FinalCTA";
+import { Footer } from "@/components/landing/Footer";
+import { GettingStarted } from "@/components/landing/GettingStarted";
+import { HeroSection } from "@/components/landing/HeroSection";
+import { LearningLoop } from "@/components/landing/LearningLoop";
+import { NavBar } from "@/components/landing/NavBar";
+import { ProblemSection } from "@/components/landing/ProblemSection";
+import { Roadmap } from "@/components/landing/Roadmap";
+import { SubjectBreakdown } from "@/components/landing/SubjectBreakdown";
+import { SurfacesBento } from "@/components/landing/SurfacesBento";
+import { TechStack } from "@/components/landing/TechStack";
+import { TrustedBar } from "@/components/landing/TrustedBar";
+
+/**
+ * Marketing entry point.
+ *
+ * Composition (14 distinct sections, 9 layout families):
+ *   1. Hero              - editorial split with product preview
+ *   2. Trusted           - quiet logo strip
+ *   3. Problem           - editorial stacked center + asymmetric 5/7/12
+ *   4. Surfaces          - 9-cell bento with real product mocks
+ *   5. Learning loop     - interactive horizontal timeline + detail panel
+ *   6. Subjects          - 6-cell grid showing subject-specific workflows
+ *   7. Architecture      - 50/50 code cards + 8-cell pillar band
+ *   8. Data model        - filterable 13-entity table by tier
+ *   9. Design            - 4-card principles grid with do/dont lists
+ *  10. Tech stack        - 8-row table reference
+ *  11. Getting started   - prerequisites strip + 3 numbered code previews
+ *  12. Roadmap           - 4-phase progress rail
+ *  13. FAQ               - accordion with 8 substantive answers
+ *  14. Contributing      - 7/5 editorial split with primary action row
+ *  15. Final CTA         - oversized gradient atmosphere with stat strip
+ *  16. Footer            - 6/6 brand + spec chips + two link columns
+ *
+ * Layout families used (no two adjacent share one):
+ *   split, strip, stacked-center, bento, timeline, grid, zig-zag,
+ *   table, accordion, gradient.
+ *
+ * Server-rendered for SEO and to keep the redirect path tight.
+ * Client Islands are isolated to the section files.
+ */
+export default async function LandingPage() {
+  const { userId } = await auth();
+  if (userId) redirect("/dashboard");
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <NavBar />
+      <main id="main">
+        <HeroSection />
+        <TrustedBar />
+        <ProblemSection />
+        <SurfacesBento />
+        <LearningLoop />
+        <SubjectBreakdown />
+        <ArchitectureSection />
+        <DataModel />
+        <DesignSection />
+        <TechStack />
+        <GettingStarted />
+        <Roadmap />
+        <FaqSection />
+        <ContributingSection />
+        <Suspense>
+          <FinalCTA />
+        </Suspense>
       </main>
+      <Footer />
     </div>
   );
 }
