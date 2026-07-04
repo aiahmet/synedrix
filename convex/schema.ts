@@ -18,7 +18,11 @@ export default defineSchema({
     description: v.optional(v.string()),
   })
     .index("by_subject", ["subjectId"])
-    .index("by_subject_order", ["subjectId", "order"]),
+    .index("by_subject_order", ["subjectId", "order"])
+    // Compound lookup for the chapter drilldown. Avoids a
+    // `collect() + in-memory find()` over all chapters in a
+    // subject.
+    .index("by_subject_slug", ["subjectId", "slug"]),
 
   topics: defineTable({
     chapterId: v.id("chapters"),
@@ -75,6 +79,23 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_topic", ["topicId"]),
 
+  /**
+   * Explicit subject enrollment. The dashboard treats a subject
+   * as "enrolled" when either this row exists OR the user has any
+   * progress for one of its topics, so this table is the new
+   * source of truth and the userTopicProgress fallback is just
+   * a migration courtesy for users who studied before the table
+   * landed.
+   */
+  userSubjects: defineTable({
+    userId: v.id("users"),
+    subjectId: v.id("subjects"),
+    enrolledAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_subject", ["userId", "subjectId"])
+    .index("by_subject", ["subjectId"]),
+
   notes: defineTable({
     userId: v.id("users"),
     topicId: v.optional(v.id("topics")),
@@ -94,8 +115,7 @@ export default defineSchema({
     reflection: v.optional(v.string()),
     completedAt: v.optional(v.number()),
   })
-    .index("by_user", ["userId"])
-    .index("by_user_created", ["userId", "_creationTime"]),
+    .index("by_user", ["userId"]),
 
   goals: defineTable({
     userId: v.id("users"),
@@ -195,21 +215,62 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_topic", ["topicId"])
-    .index("by_user_review", ["userId", "reviewAt"]),
+    .index("by_user_review", ["userId", "reviewAt"])
+    .index("by_user_topic", ["userId", "topicId"]),
 
   tutorThreads: defineTable({
     userId: v.id("users"),
     subjectId: v.optional(v.id("subjects")),
     topicId: v.optional(v.id("topics")),
     title: v.optional(v.string()),
-  }).index("by_user", ["userId"]),
+    // When the user last opened this thread. Unread count
+    // in the history sidebar = messages whose
+    // _creationTime is greater than this. `undefined`
+    // means the user has never opened the thread, so all
+    // messages count as unread.
+    lastReadAt: v.optional(v.number()),
+    // Denormalized "most recent activity" timestamp. Written
+    // by `appendUserMessage`, `recordAssistantMessage`, and
+    // `ensureThread` so the sidebar can sort threads without
+    // a per-thread `tutorMessages` query. Existing rows
+    // without this field fall back to `_creationTime`.
+    lastMessageAt: v.optional(v.number()),
+    // Denormalized unread assistant-message count. Written
+    // by `appendUserMessage`, `recordAssistantMessage`, and
+    // `markThreadRead`. Existing rows without this field
+    // treat the thread as fully unread if `lastReadAt` is
+    // missing, or fully read if `lastReadAt` is set.
+    unreadCount: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    // Hot path: getOrCreateThread needs to find the existing
+    // thread for a (user, subject, topic) tuple in O(log n).
+    // Replaces the previous "query all + in-memory find()"
+    // pattern.
+    .index("by_user_subject", ["userId", "subjectId"]),
 
   tutorMessages: defineTable({
     threadId: v.id("tutorThreads"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     quotedBlock: v.optional(v.string()),
-  }).index("by_thread", ["threadId"]),
+    /**
+     * Stable id from the client (the Vercel AI SDK's
+     * UIMessage.id). Used as a dedupe key by
+     * `appendUserMessage` so retries do not insert the
+     * same user message twice. Optional for backwards
+     * compatibility with messages written before the
+     * field existed.
+     */
+    clientId: v.optional(v.string()),
+  })
+    .index("by_thread", ["threadId"])
+    .index("by_thread_clientId", ["threadId", "clientId"]),
+
+  // Convex already returns index reads sorted by _creationTime
+  // within a single index key, so the in-memory sort in
+  // `listMessages` / `getThreadHistory` is unnecessary and has
+  // been removed.
 
   aiGenerations: defineTable({
     userId: v.id("users"),
