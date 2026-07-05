@@ -27,7 +27,7 @@
 
 ## 📖 Overview
 
-**Study OS** is not a notes app with a chatbot bolted on. It is a unified, state-driven learning environment built specifically for a German Gymnasium student preparing for the *Oberstufe* (grade 12). 
+**Synedrix** is not a notes app with a chatbot bolted on. It is a unified, state-driven learning environment built specifically for a German Gymnasium student preparing for the *Oberstufe* (grade 12). 
 
 Most study tools fragment the learning process across PDFs, generic LLM chat windows, and isolated flashcard apps. Study OS unifies the curriculum map, knowledge workspace, AI tutor, practice engine, and spaced-repetition system into a single cohesive loop. Because all five systems share the exact same context—mastery, confidence, recent mistakes, and current goals—the AI tutor already knows what the practice engine just tested, and the planner already knows what the review queue is about to demand.
 
