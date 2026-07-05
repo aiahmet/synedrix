@@ -8,19 +8,31 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "lint:content": "npx tsx scripts/lint-content.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed": "npx convex run seed:seedIfEmpty",
+    "seed:prod": "npx convex run seed:seedIfEmpty --prod"
   },
   "dependencies": {
+    "@ai-sdk/deepseek": "^3.0.5",
     "@ai-sdk/openai": "^4.0.7",
     "@ai-sdk/react": "^4.0.16",
     "@clerk/nextjs": "^7.5.12",
     "@phosphor-icons/react": "^2.1.10",
     "ai": "^7.0.15",
     "convex": "^1.42.1",
+    "katex": "^0.16.47",
+    "marked": "^18.0.5",
     "motion": "^12.42.2",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-markdown": "^9.1.0",
+    "rehype-katex": "^7.0.1",
+    "rehype-sanitize": "^6.0.0",
+    "remark-math": "^6.0.0",
+    "svix": "^1.42.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -31,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.9"
   }
 }

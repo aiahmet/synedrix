@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Convex auto-generated bindings are gitignored and
+    // re-emitted by `npx convex dev`; lint should walk past
+    // them. Mirrors the `/convex/_generated` line in
+    // `.gitignore`.
+    "convex/_generated/**",
   ]),
 ]);
 
