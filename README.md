@@ -93,7 +93,7 @@ The single most important architectural decision in Study OS is the strict separ
 | **Framework** | Next.js 16 (App Router, Turbopack, React Server Components) |
 | **Backend & DB** | Convex (Realtime DB, Server Functions, End-to-End Type Safety) |
 | **Styling** | Tailwind CSS v4 (CSS-first `@theme` configuration) |
-| **AI Engine** | Vercel AI SDK + OpenRouter (Structured Outputs, Streaming) |
+| **AI Engine** | Vercel AI SDK + DeepSeek (Structured Outputs, Streaming) |
 | **Authentication** | Clerk (Integrated via `convex/react-clerk`) |
 | **State Management** | TanStack Query (Server), Zustand (Local), React Hook Form + Zod |
 | **Observability** | PostHog (Product), Sentry (Errors), Custom AI Telemetry |
@@ -106,7 +106,7 @@ The single most important architectural decision in Study OS is the strict separ
 *   Node.js 20+
 *   A [Convex](https://www.convex.dev/) account
 *   A [Clerk](https://clerk.com/) account
-*   An [OpenRouter](https://openrouter.ai/) API key
+*   A [DeepSeek](https://platform.deepseek.com/) API key
 
 ### Installation
 
@@ -133,8 +133,9 @@ The single most important architectural decision in Study OS is the strict separ
    CLERK_SECRET_KEY=
    
    # AI
-   OPENROUTER_API_KEY=
-   OPENROUTER_DEFAULT_MODEL=
+   DEEPSEEK_API_KEY=
+   DEEPSEEK_DEFAULT_MODEL=      # optional; defaults to "deepseek-v4-flash" (use "deepseek-v4-pro" for the thinking variant)
+   # AI_TELEMETRY_ENABLED=true  # set to "true" to log AI calls to aiGenerations
    ```
 
 4. **Start the development servers:**

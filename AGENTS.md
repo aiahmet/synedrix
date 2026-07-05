@@ -11,9 +11,8 @@ Study OS is a single-user personal learning operating system for a German Gymnas
 - **State**: TanStack Query (server), Zustand (local), React Hook Form + Zod (forms).
 
 ## Architecture & Patterns
-- **Domain-Driven Design**: Feature logic lives in `src/features/[domain]/`. Shared generic UI lives in `src/components/ui/`.
-- **Business Logic**: Keep logic in Convex functions or `src/lib/` services. Never put business logic, data fetching, or AI prompt builders in presentational React components.
-- **Caching**: Use Next.js 16 explicit caching (`"use cache"`, `cacheLife`, `cacheTag`) rather than the old implicit fetch-cache model. Use `cacheTag` to invalidate specific dashboard widgets upon practice submission.
+- **Business Logic**: Keep logic in Convex functions (`convex/[domain].ts`) or `src/lib/` services. Never put business logic, data fetching, or AI prompt builders in presentational React components. The original "Domain-Driven Design (`src/features/[domain]/`)" rule is deliberately retired: the working split is `convex/` for persistent state + schema + queries/mutations, `src/lib/ai/` for AI plumbing + prompt builders + telemetry, `src/lib/content/` for shared content utilities, `src/lib/server/` for server-only helpers, and `src/components/` for visual primitives. New domains add a `convex/[domain].ts` module; the rest of these directories are framework-level plumbing.
+- **Realtime over caching**: Reactivity flows from Convex real-time subscriptions (`preloadQuery` + `usePreloadedQuery` on the client, Convex mutations on the server). We do NOT use Next.js's `"use cache"` / `cacheTag` directives on any data the dashboard reads — the data is already realtime, so layering Next.js's fetch cache on top only adds reconciliation bugs. Next.js 16's `"use cache"` is not used anywhere in this codebase today; if a future feature needs to cache a static asset, prefer the explicit directive over hand-rolled caches.
 - **Streaming**: Always stream AI responses. Never block the main thread or full page rendering during generation.
 
 ## Data Modeling (Convex)
@@ -36,7 +35,12 @@ Study OS is a single-user personal learning operating system for a German Gymnas
 - **Typecheck**: `npm run typecheck`
 - **Lint**: `npm run lint`
 - **Test**: `npm run test` (Vitest)
+- **Content lint**: `npm run lint:content` (validates `convex/seed.ts` against the contract).
+- **Convex postdeploy seed**: `npm run seed` (calls `npx convex run seed:seedIfEmpty`). Run once per fresh Convex deploy. The dashboard and `/tutor` pages also bootstrap the seed lazily on first request, so dev environments without the step still work.
 
 ## Important Next.js 16 Gotchas
 - `middleware.ts` is now `proxy.ts`. Use it for routing concerns, but do not rely on it as the sole security boundary.
-- Plan caching around the newer explicit model (`"use cache"`) rather than the old implicit fetch-cache mental model.
+- Do not wrap server-component reads in `"use cache"` if any of the data is realtime — see "Realtime over caching" above. The mental model is "if it's static, cache; if it's live, subscribe."
+
+## Code Standards
+- **Write elite-level code**: No shortcuts, no stubs, no placeholder logic. Every line must be intentional and production-grade. If you catch yourself being lazy, stop and do it properly.
