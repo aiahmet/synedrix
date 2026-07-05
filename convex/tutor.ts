@@ -3,6 +3,10 @@ import { api } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import {
+  resolveUserReadOnly as resolveUser,
+  requireUser,
+} from "./users";
 
 /**
  * Minimum session length, in seconds, for the mastery
@@ -91,10 +95,29 @@ export const getThread = query({
  * returned by `getThread`. Convex returns index reads sorted
  * by `_creationTime` within a single index key, so the
  * previous in-memory sort is unnecessary.
+ *
+ * Optional `paginationOpts.limit` (default 200, capped 500)
+ * bounds the response so a thread with thousands of
+ * messages does not stall the React render on first paint.
+ * The cap keeps the read constant-time for the typical
+ * "first session, <100 messages" case while still giving
+ * the practice-results CTA chain room to load 50-100
+ * per-coroutine-debug-explanation messages without a
+ * custom pagination surface.
  */
+const LIST_MESSAGES_DEFAULT_LIMIT = 200;
+const LIST_MESSAGES_MAX_LIMIT = 500;
 export const listMessages = query({
   args: {
     threadId: v.id("tutorThreads"),
+    /**
+     * Optional. Caps the message count so a long thread
+     * does not stall hydration. Defaults to 200; the
+     * route handler / UI should not need to set this in
+     * practice — 200 covers the realistic per-thread
+     * history length by a comfortable margin.
+     */
+    limit: v.optional(v.number()),
   },
   returns: v.array(
     v.object({
@@ -104,7 +127,7 @@ export const listMessages = query({
       quotedBlock: v.union(v.string(), v.null()),
     })
   ),
-  handler: async (ctx, { threadId }) => {
+  handler: async (ctx, { threadId, limit }) => {
     const user = await resolveUser(ctx);
     if (!user) return [];
 
@@ -112,10 +135,14 @@ export const listMessages = query({
     const thread = await ctx.db.get(threadId);
     if (!thread || thread.userId !== user._id) return [];
 
+    const effectiveLimit = Math.min(
+      LIST_MESSAGES_MAX_LIMIT,
+      Math.max(1, limit ?? LIST_MESSAGES_DEFAULT_LIMIT)
+    );
     const messages = await ctx.db
       .query("tutorMessages")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
-      .collect();
+      .take(effectiveLimit);
     // Convex returns messages sorted by _creationTime ascending
     // from the by_thread index. No in-memory sort needed.
 
@@ -359,13 +386,19 @@ export const ensureThread = mutation({
       unreadCount: 0,
     });
 
-    // Seed a welcome message so the user always lands on a
-    // non-empty thread. The copy is grounded in the topic
-    // (or subject) so it lands with context the model will
-    // already have.
+    // Seed a welcome message. The new chat prompt
+    // already teaches the model the block-marker
+    // contract; the welcome copy stays minimal so the
+    // model's own first reply — not the seed — becomes
+    // the user's first introduction to the tutor's
+    // structured teaching style.
+    const cleanTitle =
+      (title ?? (topicId ? "topic" : "subject"))
+        .replace(/[^a-zA-Z0-9 ]/g, "")
+        .trim() || (topicId ? "Topic" : "Subject");
     const welcome = topicId
-      ? "Hi — I'm your tutor for this topic. Ask me anything, or tell me what you're stuck on, and we'll work through it together."
-      : "Hi — I'm your tutor for this subject. Ask me anything, or tell me what you're stuck on, and we'll work through it together.";
+      ? "Hi — I'm your tutor for " + cleanTitle + ". Ask me anything on the topic and I'll ground my answer in your mastery and recent mistakes. We'll start by figuring out where you are; then we'll work the concept step by step."
+      : "Hi — I'm your tutor for " + cleanTitle + ". Pick a topic to drill into, or ask anything at this subject level and I'll route it to the right curriculum.";
 
     await ctx.db.insert("tutorMessages", {
       threadId,
@@ -755,32 +788,6 @@ export const markThreadRead = mutation({
   },
 });
 
-/**
- * resolveUser.
- *
- * Resolves the current Clerk identity to a Convex user row, or
- * null if no Clerk session exists. Used by thread/message
- * queries, which can be safely called without auth.
- */
-async function resolveUser(
-  ctx: QueryCtx | MutationCtx
-): Promise<Doc<"users"> | null> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) return null;
-  return await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
-}
-
-/**
- * requireUser.
- *
- * Resolves the current Clerk identity to a Convex user row, or
- * throws. Used by every authenticated mutation.
- */
-async function requireUser(ctx: MutationCtx): Promise<Doc<"users">> {
-  const user = await resolveUser(ctx);
-  if (!user) throw new Error("Unauthenticated");
-  return user;
-}
+// tutor.ts imports `resolveUser` (read-only) and `requireUser`
+// (lazy-create) from `convex/users.ts`. See users.ts for the
+// auth design + the lazy-create behavior.

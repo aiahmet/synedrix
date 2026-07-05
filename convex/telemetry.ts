@@ -1,7 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-import type { MutationCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import { requireUser } from "./users";
 
 /**
  * recordAiGeneration.
@@ -45,13 +44,6 @@ export const recordAiGeneration = mutation({
   },
 });
 
-async function requireUser(ctx: MutationCtx): Promise<Doc<"users">> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
-  if (!user) throw new Error("Unauthenticated");
-  return user;
-}
+// telemetry.ts imports the lazy-create `requireUser` from
+// `convex/users.ts` so AI generation writes from a brand-new user
+// (before the Clerk webhook has fired) do not throw. See users.ts.

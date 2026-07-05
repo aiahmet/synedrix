@@ -1,7 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Id, Doc } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import {
+  resolveUserReadOnly as resolveUser,
+  requireUser,
+} from "./users";
 
 /**
  * start.
@@ -145,38 +148,6 @@ export const getByIdForCurrentUser = query({
   },
 });
 
-/**
- * requireUser.
- *
- * Resolves the current Clerk identity to a Convex user row, or
- * throws. Used by every authenticated mutation to keep the auth
- * pattern in one place.
- */
-async function requireUser(ctx: MutationCtx): Promise<Doc<"users">> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthenticated");
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
-  if (!user) throw new Error("Unauthenticated");
-  return user;
-}
-
-/**
- * resolveUser.
- *
- * Resolves the current Clerk identity to a Convex user row, or
- * null if no Clerk session exists. Used by `getByIdForCurrentUser`,
- * which can be safely called without auth.
- */
-async function resolveUser(
-  ctx: QueryCtx | MutationCtx
-): Promise<Doc<"users"> | null> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) return null;
-  return await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
-}
+// studySessions.ts imports `resolveUser` (read-only) and
+// `requireUser` (lazy-create) from `convex/users.ts`. See users.ts
+// for the auth design + the lazy-create behavior.
