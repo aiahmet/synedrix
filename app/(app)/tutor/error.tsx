@@ -2,16 +2,23 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { WarningCircle, ArrowsClockwise, House } from "@phosphor-icons/react";
+import {
+  ArrowsClockwise,
+  House,
+  WarningCircle,
+} from "@phosphor-icons/react/dist/ssr";
 
 import { CockpitCard } from "@/components/dashboard/CockpitCard";
 
 /**
  * Error state for /tutor.
  *
- * Renders inside the cockpit card language so the page never
- * reads as a raw browser error. Uses design-system color tokens
- * (subject-french) instead of raw red-200 so it stays on-brand.
+ * Renders inside the cockpit card language and uses
+ * design system color tokens (subject-french) so the
+ * page never reads as a raw browser crash. The reset
+ * button re-runs the same boundary's render path,
+ * retrying all of the Convex subscriptions + the
+ * thread lazy-creation in one shot.
  */
 export default function TutorError({
   error,
@@ -21,6 +28,7 @@ export default function TutorError({
   reset: () => void;
 }) {
   useEffect(() => {
+     
     console.error("Tutor error:", error);
   }, [error]);
 
@@ -45,12 +53,12 @@ export default function TutorError({
               / tutor
             </span>
             <h2 className="text-[18px] font-semibold leading-tight tracking-[-0.015em] text-foreground">
-              Could not load the tutor
+              The tutor hit an unexpected error
             </h2>
             <p className="max-w-md text-[13px] leading-relaxed text-muted-foreground">
-              The thread failed to load. This is usually a temporary
-              connection issue. Your session and any messages you
-              sent are safe.
+              Most often this is a transient Convex blip. Re-trying the
+              boundary rebuilds the chat surface; your messages and
+              session state are safe.
             </p>
             {error.digest && (
               <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
