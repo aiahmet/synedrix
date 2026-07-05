@@ -279,3 +279,138 @@ html {
   transition: background-color 0.35s var(--ease-smooth),
     color 0.35s var(--ease-smooth);
 }
+
+/*
+ * AI markdown container. Long, unbreakable KaTeX expressions
+ * (think a single-block derivation) would otherwise overflow
+ * the lesson/chat bubble horizontally. Break anywhere the
+ * algorithm can to keep math readable on narrow screens.
+ */
+.aimarkdown-container {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/*
+ * KaTeX adapts its math color to the surrounding text via
+ * `currentColor`, but MathML glyphs render black in dark
+ * mode by default. Force foreground color so math stays
+ * legible when the user switches theme.
+ */
+.katex {
+  color: var(--foreground);
+}
+
+[data-theme="dark"] .katex .mord,
+[data-theme="dark"] .katex .mop,
+[data-theme="dark"] .katex .mbin,
+[data-theme="dark"] .katex .mrel,
+[data-theme="dark"] .katex .mopen,
+[data-theme="dark"] .katex .mclose,
+[data-theme="dark"] .katex .mpunct {
+  color: var(--foreground);
+}
+
+/*
+ * Tutor shell utility classes.
+ *
+ * Custom utilities introduced by the AI Copilot
+ * redesign. Each lives in globals.css rather than
+ * Tailwind so the surface area is grep-able from a
+ * single place — and so the visual rules do not
+ * bloat the dynamic Tailwind class scan in production.
+ */
+
+/* Floating surface color-mix recipe used across the
+   tutor memory panel + step-reveal + choice-menu
+   backgrounds. Reads as a soft surface tint over the
+   existing surface ladder. */
+.tutor-tile {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-elevated) 88%,
+    transparent
+  );
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 12px;
+}
+
+/* Soft drop shadow for the right memory rail + the
+   left history rail so they read as floating panes
+   against the central chat surface. */
+.tutor-rail-shadow {
+  box-shadow: inset 1px 0 0 rgb(0 0 0 / 0.02),
+    -8px 0 24px -12px rgb(0 0 0 / 0.06);
+}
+
+/* Subtle bar shadow for the chat scroll container.
+   Sits on top of every column so a long thread reads
+   as a continuous surface. */
+.tutor-chat-shadow {
+  box-shadow: var(--shadow-soft);
+}
+
+/* Reveal-step caption chip style. Used in
+   `StepReveal` rows whose body has not yet been
+   revealed — keeps the placeholder row visually
+   grounded. */
+.tutor-step-pending {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Choice-menu answer tone. Implemented here so the
+   `correct` / `incorrect` colors stay swappable from
+   a single source. */
+.tutor-choice-correct {
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent);
+}
+.tutor-choice-incorrect {
+  background-color: color-mix(
+    in srgb,
+    var(--subject-french) 12%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--subject-french) 32%,
+    var(--border)
+  );
+  color: var(--subject-french);
+}
+
+/* Diagram block "sketched" caption. Centered caption
+   with a fade-up animation so the card reads as the
+   AI just drew something. */
+.tutor-diagram-caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted-foreground);
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: color-mix(
+    in srgb,
+    var(--surface-elevated) 60%,
+    transparent
+  );
+}
+
+/* Timeline column hover hint. The left-side timestamp
+   column dims out of the chat surface so a long thread
+   reads as a continuous band. Reveals on hover when
+   the cursor is over the row. */
+.tutor-timeline-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: color-mix(in srgb, var(--border) 100%, transparent);
+}

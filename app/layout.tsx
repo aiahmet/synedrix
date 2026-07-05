@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+// KaTeX CSS MUST be loaded before globals.css so the design
+// system tokens can override KaTeX's defaults (color,
+// background, etc.) when needed. The relative @font-face
+// paths inside katex.min.css are rewritten by the Next.js
+// bundler to `_next/static/media/...`, so the WOFF2 fonts
+// ship self-hosted with zero CDN dependency.
+import "katex/dist/katex.min.css";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
@@ -49,7 +56,7 @@ export const metadata: Metadata = {
     "mistake journal",
     "flashcard app",
     "Convex",
-    "OpenRouter",
+    "DeepSeek",
     "open source study app",
   ],
   authors: [{ name: "Ahmet Cetin" }],
