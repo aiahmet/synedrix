@@ -6,6 +6,7 @@ import { Preloaded } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import { EmptySubjectsState } from "@/components/dashboard/EmptySubjectsState";
+import { ensureSeedBootstrapped } from "@/lib/server/bootstrapSeed";
 import { DashboardOverviewClient } from "./DashboardOverviewClient";
 
 /**
@@ -22,6 +23,14 @@ import { DashboardOverviewClient } from "./DashboardOverviewClient";
  * instantly when practice submissions, reviews, or new sessions
  * land in Convex, without a router refresh.
  *
+ * Bootstraps the canonical curriculum before the cockpit query
+ * runs. A fresh Convex deployment has no `subjects` rows, so
+ * `api.subjects.list` would return `[]` and the user would
+ * land on /subjects seeing "No subjects indexed yet" with no
+ * path forward. `api.seed.seedIfEmpty` is idempotent on slug
+ * short-circuit, so calling it on every dashboard render costs
+ * one indexed read and zero writes on a populated deployment.
+ *
  * The page is auth-gated at the layout level too, but we re-verify
  * here per the project's security rule that middleware is a
  * first-pass redirect only.
@@ -33,11 +42,28 @@ export default async function DashboardPage() {
   const user = await currentUser();
   const firstName = user?.firstName ?? "Student";
 
+  // Run the lazy seed bootstrap before the cockpit query so the
+  // first paint of any /subjects navigation has real canonical
+  // data. The helper memoises on `globalThis.__synedrixSeedInflight`
+  // (see `src/lib/server/bootstrapSeed.ts`), so a populated
+  // deployment pays at most one cross-network round-trip per
+  // server instance. Failures are non-fatal — the page still
+  // renders the empty state if Convex is unreachable.
+  await ensureSeedBootstrapped();
+
   let preloaded: Preloaded<typeof api.dashboard.getOverview> | null = null;
+  let subjectsPreloaded: Preloaded<typeof api.subjects.list> | null = null;
   let isConvexConfigured = true;
 
   try {
-    preloaded = await preloadQuery(api.dashboard.getOverview, {});
+    // Two independent reads: the cockpit payload (per-user)
+    // and the canonical subject list (so the empty cockpit
+    // can render the inline one-click picker). Both run in
+    // parallel below.
+    [preloaded, subjectsPreloaded] = await Promise.all([
+      preloadQuery(api.dashboard.getOverview, {}),
+      preloadQuery(api.subjects.list, {}),
+    ]);
   } catch {
     // If the Convex deployment is not reachable (e.g. missing env
     // in local dev), fall through to the empty state so the page
@@ -61,8 +87,12 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      {preloaded ? (
-        <DashboardOverviewClient preloaded={preloaded} fallbackName={firstName} />
+      {preloaded && subjectsPreloaded ? (
+        <DashboardOverviewClient
+          preloaded={preloaded}
+          subjectsPreloaded={subjectsPreloaded}
+          fallbackName={firstName}
+        />
       ) : (
         <EmptySubjectsState userName={firstName} />
       )}

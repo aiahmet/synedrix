@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 import { footerLinkColumns, heroStats } from "@/components/landing/data";
 
@@ -24,8 +25,14 @@ export function Footer() {
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-12 sm:gap-8">
           <div className="sm:col-span-6">
             <div className="inline-flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-[10px] font-bold text-accent-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-                SX
+              <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg">
+                <Image
+                  src="/synedrix-logo.png"
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="32px"
+                />
               </span>
               <span className="text-[15px] font-semibold tracking-tight text-foreground">
                 Synedrix

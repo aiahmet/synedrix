@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -91,8 +92,14 @@ export function NavBar() {
             className="flex items-center gap-2.5 rounded-full px-1.5 py-1 font-semibold tracking-tight text-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label="Synedrix home"
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-[10px] font-bold text-accent-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-              SX
+            <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg">
+              <Image
+                src="/synedrix-logo.png"
+                alt=""
+                fill
+                className="object-cover"
+                sizes="28px"
+              />
             </span>
             <span className="text-sm">Synedrix</span>
             <span className="ml-1 hidden rounded-full border border-border bg-surface px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground lg:inline">

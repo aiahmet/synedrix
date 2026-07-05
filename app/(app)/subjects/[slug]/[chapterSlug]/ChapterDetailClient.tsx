@@ -6,6 +6,7 @@ import { Preloaded, usePreloadedQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ChapterHeader } from "@/components/dashboard/ChapterHeader";
 import { TopicList } from "@/components/dashboard/TopicList";
+import { AddTopicForm } from "@/components/dashboard/AddTopicForm";
 import { ArrowLeft, Books } from "@/components/landing/icons";
 
 /**
@@ -51,6 +52,11 @@ export function ChapterDetailClient({
         estimatedMinutesTotal={data.aggregate.estimatedMinutesTotal}
       />
       <TopicList topics={data.topics} subject={data.subject} />
+      <AddTopicForm
+        chapterId={data.chapter.id}
+        subjectTitle={data.subject.title}
+        subjectSlug={data.subject.slug}
+      />
     </div>
   );
 }

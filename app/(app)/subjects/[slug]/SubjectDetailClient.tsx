@@ -37,7 +37,12 @@ export function SubjectDetailClient({
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 sm:gap-7">
-      <SubjectHeader subject={data.subject} enrolled={data.enrolled} />
+      <SubjectHeader
+        subject={data.subject}
+        enrolled={data.enrolled}
+        aggregate={data.aggregate}
+        nextBest={data.nextBest}
+      />
       <SubjectDetailStats
         mastery={data.aggregate.mastery}
         topicsStudied={data.aggregate.topicsStudied}

@@ -1,7 +1,9 @@
 import Link from "next/link";
 
 import { CockpitCard } from "./CockpitCard";
+import { AvailableSubjectStrip } from "./AvailableSubjectStrip";
 import { ArrowRight, Sparkle } from "@/components/landing/icons";
+import type { Id } from "@/convex/_generated/dataModel";
 
 /**
  * EmptySubjectsState.
@@ -9,16 +11,42 @@ import { ArrowRight, Sparkle } from "@/components/landing/icons";
  * The first impression for a brand-new user. Replaces the
  * stats row + mastery strip when the cockpit has no data.
  *
- * The page is honest about what it is: there is no "magic
- * first session", there is no fake dashboard. The CTA
- * routes the user to /subjects, which is the next real
- * screen. Three short value-prop points underneath explain
- * what unlocks once they pick a subject.
+ * Two modes:
+ *
+ *  1. With `availableSubjects`: the right column renders the
+ *     `AvailableSubjectStrip` so the user can add a subject
+ *     with one click from the dashboard itself. The left
+ *     column keeps the welcome copy + value props + a
+ *     secondary "See all subjects" link as a fallback. This
+ *     is the path every new user takes today.
+ *
+ *  2. Without `availableSubjects`: the right column falls back
+ *     to the quiet diagrammatic placeholder. Used when the
+ *     canonical curriculum has not yet been seeded (fresh
+ *     Convex deployment in offline / isConvexConfigured=false
+ *     scenarios).
  */
 export function EmptySubjectsState({
   userName,
+  availableSubjects,
 }: {
   readonly userName: string;
+  /**
+   * Optional. When provided, replaces the right-column
+   * diagram with a one-click enroll strip. The dashboard
+   * page passes the canonical subjects list along with the
+   * user's enrollment state so each chip knows whether it
+   * is already enrolled.
+   */
+  readonly availableSubjects?: ReadonlyArray<{
+    readonly id: Id<"subjects">;
+    readonly slug: string;
+    readonly title: string;
+    readonly color?: string;
+    readonly icon?: string;
+    readonly enrolled: boolean;
+    readonly topicCount: number;
+  }>;
 }) {
   return (
     <CockpitCard className="overflow-hidden">
@@ -59,20 +87,18 @@ export function EmptySubjectsState({
               href="/subjects"
               className="inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 text-[13.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-all hover:opacity-90 active:scale-[0.98]"
             >
-              Add your first subject
+              Browse all subjects
               <ArrowRight className="h-4 w-4" weight="bold" />
-            </Link>
-            <Link
-              href="/subjects"
-              className="inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface-elevated px-5 text-[13.5px] font-medium text-foreground transition-colors hover:bg-surface"
-            >
-              Browse subjects
             </Link>
           </div>
         </div>
 
         <div className="md:col-span-5">
-          <EmptyStateDiagram />
+          {availableSubjects && availableSubjects.length > 0 ? (
+            <SubjectPickerPanel subjects={availableSubjects} />
+          ) : (
+            <EmptyStateDiagram />
+          )}
         </div>
       </div>
     </CockpitCard>
@@ -80,13 +106,47 @@ export function EmptySubjectsState({
 }
 
 /**
- * Quiet diagrammatic preview shown next to the empty-state copy.
- *
- * Three subject-colored chips, no progress bars, no fake data.
- * Just a structural hint that "subjects land here". The dashed
- * border + "Awaiting" copy keep it honest: this is not your
- * data. Replaces the older version that rendered fake 62%
- * mastery bars.
+ * Right-column panel when the canonical subjects list is
+ * available. Title + the inline enroll strip. The dashboard
+ * page renders this when Convex has the curriculum data,
+ * giving the user a one-click in-place add flow.
+ */
+function SubjectPickerPanel({
+  subjects,
+}: {
+  readonly subjects: ReadonlyArray<{
+    readonly id: Id<"subjects">;
+    readonly slug: string;
+    readonly title: string;
+    readonly color?: string;
+    readonly icon?: string;
+    readonly enrolled: boolean;
+    readonly topicCount: number;
+  }>;
+}) {
+  return (
+    <div
+      aria-label="Add a subject"
+      className="relative mx-auto w-full max-w-sm rounded-2xl border border-border bg-surface-elevated/60 p-4"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        pick your first subject
+      </p>
+      <p className="mt-1 text-[11.5px] text-muted-foreground">
+        One click adds it. The cockpit flips open the moment you pick.
+      </p>
+      <div className="mt-3">
+        <AvailableSubjectStrip subjects={subjects} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Quiet diagrammatic preview shown when no canonical subjects
+ * data is available (the canonical curriculum has not been
+ * seeded or Convex is unreachable). Honest about the
+ * situation: this is not your data, it is a shape preview.
  */
 function EmptyStateDiagram() {
   return (

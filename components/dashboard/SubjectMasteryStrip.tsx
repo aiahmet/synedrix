@@ -1,7 +1,10 @@
 import Link from "next/link";
 
 import { CockpitCard, CockpitCardHeader } from "./CockpitCard";
-import { ArrowUpRight, Books } from "@/components/landing/icons";
+import {
+  ArrowUpRight,
+  SubjectGlyph,
+} from "@/components/landing/icons";
 import { cn } from "@/lib/utils/cn";
 import { resolveColorVar } from "@/lib/utils/subjectColor";
 
@@ -80,12 +83,7 @@ function SubjectRow({ subject }: { readonly subject: SubjectMasteryEntry }) {
             borderColor: `color-mix(in srgb, ${fillVar} 28%, transparent)`,
           }}
         >
-          <Books
-            className="h-[1.05rem] w-[1.05rem]"
-            weight="duotone"
-            style={{ color: fillVar }}
-            aria-hidden
-          />
+          <SubjectGlyph icon={subject.icon} className="h-[1.05rem] w-[1.05rem]" fillVar={fillVar} />
         </span>
 
         <div className="min-w-0 flex-1">

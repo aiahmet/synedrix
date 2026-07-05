@@ -14,6 +14,7 @@ import {
   Sparkle,
   Target,
   Timer,
+  UserCircle,
 } from "@/components/landing/icons";
 import { cn } from "@/lib/utils/cn";
 import { formatRelativeDate } from "@/lib/format/relativeDate";
@@ -32,6 +33,14 @@ export interface TopicListEntry {
   readonly mastery: number;
   readonly lastStudiedAt: number | null;
   readonly isStudied: boolean;
+  /**
+   * Discriminator per plan §4.2. `user` rows render
+   * the "MY TOPIC" badge and link the title to the
+   * `/my-topics/[slug]/lesson` page rather than the
+   * canonical `/subjects/[s]/[c]/[t]` drilldown.
+   */
+  readonly source: "canonical" | "user";
+  readonly ownerId: Id<"users"> | null;
 }
 
 /**
@@ -108,8 +117,18 @@ function TopicRow({
   const lastStudiedLabel = topic.lastStudiedAt
     ? formatRelativeDate(topic.lastStudiedAt)
     : "Not started";
+  const isUserTopic = topic.source === "user";
 
+  // User-owned topics route to the /my-topics lesson
+  // page; canonical topics route through /tutor with the
+  // study session CTA (existing behavior).
   const onStart = () => {
+    if (isUserTopic) {
+      startTransition(() => {
+        router.push(`/my-topics/${topic.slug}/lesson`);
+      });
+      return;
+    }
     startTransition(async () => {
       try {
         await startSession({
@@ -134,6 +153,7 @@ function TopicRow({
             </h3>
             <DifficultyPill difficulty={topic.difficulty} />
             <ExamRelevance relevance={topic.examRelevance} />
+            {isUserTopic && <MyTopicBadge />}
           </div>
           {topic.objectives.length > 0 && (
             <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-muted-foreground">
@@ -193,17 +213,25 @@ function TopicRow({
             disabled={pending}
             className={cn(
               "inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-medium transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
-              isEmpty
-                ? "bg-foreground text-background hover:opacity-90"
-                : "bg-accent text-accent-foreground hover:opacity-90"
+              isUserTopic
+                ? "bg-surface-elevated text-foreground hover:bg-surface"
+                : isEmpty
+                  ? "bg-foreground text-background hover:opacity-90"
+                  : "bg-accent text-accent-foreground hover:opacity-90"
             )}
           >
-            {isEmpty ? (
+            {isUserTopic ? (
+              <UserCircle className="h-3.5 w-3.5" weight="duotone" />
+            ) : isEmpty ? (
               <Sparkle className="h-3.5 w-3.5" weight="duotone" />
             ) : (
               <Pulse className="h-3.5 w-3.5" weight="duotone" />
             )}
-            {pending ? "Starting..." : "Start topic"}
+            {pending
+              ? "Opening..."
+              : isUserTopic
+                ? "Open lesson"
+                : "Start topic"}
             {!pending && (
               <ArrowRight className="h-3.5 w-3.5" weight="bold" />
             )}
@@ -261,6 +289,29 @@ function ExamRelevance({ relevance }: { readonly relevance: number }) {
     <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
       <Target className="h-2.5 w-2.5" weight="bold" />
       {label}
+    </span>
+  );
+}
+
+/**
+ * Small "MY TOPIC" badge used on user-source rows in the
+ * chapter topic list. Subject-chemistry tone (green) so
+ * it reads as "yours / authored" without conflicting
+ * with the difficulty or exam-relevance pills.
+ */
+function MyTopicBadge() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.16em]"
+      style={{
+        backgroundColor:
+          "color-mix(in srgb, var(--subject-chemistry) 10%, transparent)",
+        borderColor:
+          "color-mix(in srgb, var(--subject-chemistry) 28%, transparent)",
+        color: "var(--subject-chemistry)",
+      }}
+    >
+      my topic
     </span>
   );
 }

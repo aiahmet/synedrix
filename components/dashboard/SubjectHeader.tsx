@@ -10,9 +10,11 @@ import type { Id } from "@/convex/_generated/dataModel";
 import {
   ArrowLeft,
   ArrowRight,
-  Books,
+  ArrowUpRight,
   Check,
+  SubjectGlyph,
   Sparkle,
+  Timer,
 } from "@/components/landing/icons";
 import { cn } from "@/lib/utils/cn";
 import { resolveColorVar } from "@/lib/utils/subjectColor";
@@ -20,19 +22,38 @@ import { resolveColorVar } from "@/lib/utils/subjectColor";
 /**
  * SubjectHeader.
  *
- * The top band of the /subjects/[slug] page. Carries the breadcrumb
- * back to /subjects, the subject's color-coded identity, an
- * enrollment badge, and the primary CTA to start a study session.
+ * The top band of the /subjects/[slug] page. Carries the
+ * breadcrumb back to /subjects, the subject's color-coded
+ * identity, an enrollment badge, the estimated time to
+ * mastery chip, an optional "Up next" pill driven by the
+ * server-side `nextBest` recommendation, and the primary
+ * CTA to start a study session.
  *
- * The CTA is the only interactive piece. It calls a Convex
- * mutation to record the session, then navigates to the tutor
- * pre-loaded with the subject context. While the mutation is
- * in flight, the button shows a quiet "Starting..." state via
- * useTransition.
+ * The CTA is the only interactive piece that fires a
+ * mutation. It calls `studySessions.start` to record the
+ * session, then navigates to the tutor pre-loaded with the
+ * subject context. While the mutation is in flight, the
+ * button shows a quiet "Starting..." state via
+ * `useTransition`.
+ *
+ * ETA chip: `(unmasteredTopics * avgMinutes) / 60` where
+ * `avgMinutes` is `aggregate.estimatedMinutesTotal /
+ * aggregate.topicCount` (falling back to 30 if the subject
+ * has no topics yet). Rounded to the nearest hour. Hidden
+ * when the subject has no topics.
+ *
+ * "Up next" pill: rendered when `nextBest` is non-null,
+ * linking to the first topic in the recommended chapter.
+ * Hidden when the user has nothing to study next. Uses the
+ * per-subject hue (not the global accent) so the pill
+ * reads as "this is part of the subject", not "this is a
+ * platform CTA".
  */
 export function SubjectHeader({
   subject,
   enrolled,
+  aggregate,
+  nextBest,
 }: {
   readonly subject: {
     readonly id: Id<"subjects">;
@@ -40,8 +61,38 @@ export function SubjectHeader({
     readonly title: string;
     readonly description: string | null;
     readonly color?: string;
+    readonly icon?: string;
   };
   readonly enrolled: boolean;
+  /**
+   * The same aggregate the `SubjectDetailClient` renders
+   * into `SubjectDetailStats` below the header. We read
+   * `topicCount`, `topicsStudied`, and
+   * `estimatedMinutesTotal` to render the ETA chip.
+   */
+  readonly aggregate: {
+    readonly topicCount: number;
+    readonly topicsStudied: number;
+    readonly estimatedMinutesTotal: number;
+  };
+  /**
+   * The per-subject "Up next" recommendation from
+   * `getBySlug.nextBest`. `null` when the user has
+   * mastered every topic in the subject, or the subject
+   * has no chapters. Hidden when null.
+   */
+  readonly nextBest: {
+    readonly subject: { readonly slug: string; readonly title: string; readonly color?: string };
+    readonly chapter: { readonly slug: string; readonly title: string };
+    readonly topic: {
+      readonly id: Id<"topics">;
+      readonly slug: string;
+      readonly title: string;
+      readonly examRelevance: number;
+      readonly mastery: number;
+    };
+    readonly reason: string;
+  } | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -49,6 +100,23 @@ export function SubjectHeader({
   const enroll = useMutation(api.subjects.enroll);
   const [enrollPending, startEnroll] = useTransition();
   const fillVar = resolveColorVar(subject.color);
+
+  // ETA to mastery. Hidden when the subject has no topics
+  // yet (the "Open" CTA is the right surface for an empty
+  // catalog entry).
+  const unmasteredTopics = Math.max(
+    0,
+    aggregate.topicCount - aggregate.topicsStudied
+  );
+  const avgMinutes =
+    aggregate.topicCount > 0
+      ? aggregate.estimatedMinutesTotal / aggregate.topicCount
+      : 30;
+  const etaHours =
+    unmasteredTopics > 0
+      ? Math.max(1, Math.round((unmasteredTopics * avgMinutes) / 60))
+      : 0;
+  const showEta = aggregate.topicCount > 0 && unmasteredTopics > 0;
 
   const onStart = () => {
     startTransition(async () => {
@@ -90,11 +158,7 @@ export function SubjectHeader({
             }}
             aria-hidden
           >
-            <Books
-              className="h-6 w-6"
-              weight="duotone"
-              style={{ color: fillVar }}
-            />
+            <SubjectGlyph icon={subject.icon} className="h-6 w-6" fillVar={fillVar} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -111,11 +175,42 @@ export function SubjectHeader({
                   Not enrolled
                 </span>
               )}
+              {showEta && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border bg-surface-elevated px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.12em]"
+                  style={{
+                    borderColor: `color-mix(in srgb, ${fillVar} 30%, transparent)`,
+                    color: fillVar,
+                  }}
+                >
+                  <Timer className="h-2.5 w-2.5" weight="duotone" />
+                  ~ {etaHours}h to mastery
+                </span>
+              )}
             </div>
             {subject.description && (
               <p className="mt-2 max-w-xl text-pretty text-[13.5px] leading-relaxed text-muted-foreground">
                 {subject.description}
               </p>
+            )}
+            {nextBest && enrolled && (
+              <Link
+                href={`/subjects/${nextBest.subject.slug}/${nextBest.chapter.slug}/${nextBest.topic.slug}`}
+                className="mt-3 inline-flex h-9 w-fit items-center gap-2 rounded-full border bg-surface-elevated/60 px-3 text-[12px] font-medium text-foreground backdrop-blur-sm transition-colors hover:border-accent-border/60"
+                style={{
+                  borderColor: `color-mix(in srgb, ${fillVar} 30%, transparent)`,
+                }}
+                title={nextBest.reason}
+              >
+                <span
+                  className="font-mono text-[9.5px] uppercase tracking-[0.16em]"
+                  style={{ color: fillVar }}
+                >
+                  Up next
+                </span>
+                <span className="max-w-[200px] truncate">{nextBest.topic.title}</span>
+                <ArrowUpRight className="h-3 w-3" weight="bold" />
+              </Link>
             )}
           </div>
         </div>
