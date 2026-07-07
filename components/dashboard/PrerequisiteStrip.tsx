@@ -26,15 +26,24 @@ export interface PrerequisiteTopicEntry {
  * PrerequisiteStrip.
  *
  * Renders a small ordered list of prerequisite topics for the
- * current topic. Each chip is a real link to the prerequisite's
+ * current topic. Each row is a deep link to the prerequisite's
  * topic page so the user can drill back into the curriculum.
  *
- * The "unlocked" boolean drives the visual: an unlocked prereq
- * shows a small check chip; a locked (mastery < 0.5) prereq
- * shows a tiny lock badge and a softer treatment. The headline
- * copy on the card switches between "Prerequisites in place"
- * and "Finish X first" depending on whether any prerequisite is
- * still locked.
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **No carded inner list rows.** The previous
+ *     `border bg-background` mini-cards inside the `CockpitCard`
+ *     were the "carded list rows" anti-pattern. Rows are now a
+ *     flat ordered list with `divide-y` between rows, no border
+ *     on each row (§1).
+ *
+ *   - **No icon container.** The check / lock icon renders at
+ *     native size in a quiet text-muted-foreground tone, not
+ *     inside an `bg-accent-subtle/60` pill (§8).
+ *
+ *   - **No pill chip.** The "Locked" footer hint is a quiet
+ *     target icon + body copy, no `bg-surface-elevated/60`
+ *     container.
  *
  * Server-renderable. No interactive elements.
  */
@@ -67,65 +76,60 @@ export function PrerequisiteStrip({
           </span>
         }
       />
-      <ol className="flex flex-col gap-2">
+      <ol className="divide-y divide-border/60">
         {prerequisites.map((p) => (
           <li key={p.id}>
             <Link
               href={`/subjects/${p.subjectSlug}/${p.chapterSlug}/${p.slug}`}
               className={cn(
-                "group flex items-center gap-3 rounded-lg border px-3 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                p.unlocked
-                  ? "border-border/60 bg-background hover:border-accent-border/60 hover:bg-surface"
-                  : "border-border/40 bg-surface-sunken/40 hover:border-border"
+                "group flex items-center gap-3 py-3 outline-none transition-colors first:pt-0 last:pb-0 hover:bg-surface focus-visible:bg-surface",
               )}
             >
               <span
                 className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border",
-                  p.unlocked
-                    ? "border-accent-border/50 bg-accent-subtle/60 text-accent"
-                    : "border-border bg-surface text-muted-foreground"
+                  "flex h-5 w-5 shrink-0 items-center justify-center",
+                  p.unlocked ? "text-accent" : "text-muted-foreground",
                 )}
                 aria-hidden
               >
                 {p.unlocked ? (
-                  <Check className="h-3 w-3" weight="bold" />
+                  <Check className="h-3.5 w-3.5" weight="bold" />
                 ) : (
-                  <LockSimple className="h-3 w-3" weight="bold" />
+                  <LockSimple className="h-3.5 w-3.5" weight="bold" />
                 )}
               </span>
               <div className="min-w-0 flex-1">
                 <p
                   className={cn(
                     "truncate text-[12.5px] font-medium tracking-tight",
-                    p.unlocked ? "text-foreground" : "text-muted-foreground"
+                    p.unlocked ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
                   {p.title}
                 </p>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="h-1 w-16 overflow-hidden rounded-full bg-surface">
-                    <div
-                      className="h-full rounded-full transition-[width] duration-500 ease-out"
-                      style={{
-                        width: `${Math.max(p.isStudied ? 6 : 0, Math.round(p.mastery * 100))}%`,
-                        backgroundColor: p.unlocked
-                          ? "var(--accent)"
-                          : "var(--muted)",
-                      }}
-                    />
-                  </div>
-                  <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
-                    {Math.round(p.mastery * 100)}%
-                  </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-1 w-16 overflow-hidden rounded-full bg-border">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500 ease-out"
+                    style={{
+                      width: `${Math.max(p.isStudied ? 6 : 0, Math.round(p.mastery * 100))}%`,
+                      backgroundColor: p.unlocked
+                        ? "var(--accent)"
+                        : "var(--muted)",
+                    }}
+                  />
                 </div>
+                <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                  {Math.round(p.mastery * 100)}%
+                </span>
               </div>
             </Link>
           </li>
         ))}
       </ol>
       {lockedEntry && (
-        <p className="mt-3 inline-flex items-start gap-1.5 rounded-md border border-border/60 bg-surface-elevated/60 px-2.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+        <p className="mt-3 inline-flex items-start gap-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
           <Target className="mt-0.5 h-3 w-3 shrink-0 text-accent" weight="duotone" />
           <span>
             Finish{" "}

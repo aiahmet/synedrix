@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
     lessonContent: lessonRow.content,
     lessonSections: lessonRow.sections,
     topicTitle: lessonRow.topicTitle,
+    subjectSlug: lessonRow.subjectSlug,
     count,
     gradeLevel: lessonRow.gradeLevel,
     language: "de",
@@ -110,6 +111,7 @@ async function fetchLessonById(
   sections: Array<{ heading: string; body: string }>;
   topicTitle: string;
   gradeLevel: string | null;
+  subjectSlug: string;
 } | null> {
   try {
     const result = await convex.query(
@@ -122,6 +124,7 @@ async function fetchLessonById(
       sections: result.sections,
       topicTitle: result.topicTitle,
       gradeLevel: result.gradeLevel,
+      subjectSlug: result.subjectSlug,
     };
   } catch (err) {
     console.error("fetchLessonById failed:", err);

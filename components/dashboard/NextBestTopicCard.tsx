@@ -30,6 +30,8 @@ export interface NextBestEntry {
     readonly title: string;
     readonly examRelevance: number;
     readonly mastery: number;
+    readonly source: "canonical" | "user";
+    readonly ownerId: string | null;
   };
   readonly reason: string;
 }
@@ -40,18 +42,45 @@ export interface NextBestEntry {
  * Highlight card pointing to the learner's next-best topic —
  * the highest-scoring unmastered topic across their enrolled
  * subjects, computed by
- * `api.subjects.getTopicDetailBySlug` (see the query for the
- * scoring formula). The card gives the topic title, the chapter
- * it lives in, the subject, and a one-line reason (mastery
- * percentage, exam-relevance flag, "not started yet" hint).
+ * `api.subjects.getTopicDetailBySlug`. The card gives the topic
+ * title, the chapter it lives in, the subject, and a one-line
+ * reason.
+ *
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **No icon container.** The Sparkle glyph renders at
+ *     native size in the per-subject hue (§8).
+ *
+ *   - **No pill chip.** "High yield" / "Recommended" is plain
+ *     uppercase muted text (§1).
+ *
+ *   - **No bouncy CTA.** Buttons don't bounce.
+ *
+ *   - **`hover:bg-foreground/90`** on the small arrow chip
+ *     and `hover:brightness-95` on the per-subject hue CTA
+ *     (post-lesson variant).
+ *
+ *   - **No carded inner list row.** The card body is one flat
+ *     link, not a `border bg-background` mini-card (§1:
+ *     "Carded list rows. Lists are typography.").
  *
  * Server-renderable. The CTA is a Next <Link>, so no client
  * state exists on the card itself.
  */
 export function NextBestTopicCard({
   nextBest,
+  variant = "default",
 }: {
   readonly nextBest: NextBestEntry | null;
+  /**
+   * Visual variants:
+   *   - "default": right-column card (used on the
+   *     topic page right sidebar).
+   *   - "post-lesson": full-width card with an
+   *     "After this topic" eyebrow. Used at the end
+   *     of the topic page main column.
+   */
+  readonly variant?: "default" | "post-lesson";
 }) {
   if (!nextBest) {
     return (
@@ -69,6 +98,69 @@ export function NextBestTopicCard({
   const fillVar = resolveColorVar(nextBest.subject.color);
   const masteryPct = Math.round(nextBest.topic.mastery * 100);
   const yieldPill = nextBest.topic.examRelevance >= 4;
+  const userOwned =
+    nextBest.topic.source === "user" && nextBest.topic.ownerId !== null;
+  const canonicalHref = `/subjects/${nextBest.subject.slug}/${nextBest.chapter.slug}/${nextBest.topic.slug}`;
+  const userHref = `/my-topics/${nextBest.topic.slug}/lesson`;
+  const href = userOwned ? userHref : canonicalHref;
+
+  if (variant === "post-lesson") {
+    return (
+      <CockpitCard className="relative overflow-hidden">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-1"
+          style={{ backgroundColor: fillVar }}
+        />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
+            <span
+              className="mt-0.5 shrink-0"
+              style={{ color: fillVar }}
+              aria-hidden
+            >
+              <Sparkle className="h-6 w-6" weight="duotone" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+                After this topic
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+                  {nextBest.subject.title} · {nextBest.chapter.title}
+                </p>
+                {yieldPill && (
+                  <span
+                    className="font-mono text-[10.5px] uppercase tracking-[0.16em]"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    High yield
+                  </span>
+                )}
+              </div>
+              <h3 className="mt-1 text-balance text-[clamp(1.05rem,1.2vw+0.5rem,1.25rem)] font-semibold leading-[1.12] tracking-[-0.02em] text-foreground">
+                {nextBest.topic.title}
+              </h3>
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                {nextBest.reason}
+              </p>
+            </div>
+          </div>
+          {/* Per-subject hue CTA. `hover:brightness-95` darkens
+              the per-subject color in a controlled way without
+              falling back to `hover:opacity-90`. */}
+          <Link
+            href={href}
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-5 text-[13.5px] font-medium text-background transition-all hover:brightness-95"
+            style={{ backgroundColor: fillVar }}
+          >
+            Continue next
+            <ArrowRight className="h-4 w-4" weight="bold" />
+          </Link>
+        </div>
+      </CockpitCard>
+    );
+  }
 
   return (
     <CockpitCard>
@@ -81,20 +173,16 @@ export function NextBestTopicCard({
         }
       />
       <Link
-        href={`/subjects/${nextBest.subject.slug}/${nextBest.chapter.slug}/${nextBest.topic.slug}`}
-        className="group block rounded-lg border border-border bg-background p-3 outline-none transition-colors hover:border-accent-border/60 focus-visible:ring-2 focus-visible:ring-ring"
+        href={href}
+        className="group block rounded-md px-1 py-1 outline-none transition-colors hover:bg-surface focus-visible:bg-surface"
       >
         <div className="flex items-start gap-3">
           <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
-            style={{
-              backgroundColor: `color-mix(in srgb, ${fillVar} 14%, transparent)`,
-              borderColor: `color-mix(in srgb, ${fillVar} 30%, transparent)`,
-              color: fillVar,
-            }}
+            className="mt-0.5 shrink-0"
+            style={{ color: fillVar }}
             aria-hidden
           >
-            <Sparkle className="h-4 w-4" weight="duotone" />
+            <Sparkle className="h-5 w-5" weight="duotone" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -102,7 +190,10 @@ export function NextBestTopicCard({
                 {nextBest.subject.title} · {nextBest.chapter.title}
               </p>
               {yieldPill && (
-                <span className="inline-flex items-center rounded-full bg-accent-subtle px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-accent">
+                <span
+                  className="font-mono text-[10.5px] uppercase tracking-[0.16em]"
+                  style={{ color: "var(--accent)" }}
+                >
                   High yield
                 </span>
               )}
@@ -120,7 +211,7 @@ export function NextBestTopicCard({
                   style={{
                     width: `${Math.max(
                       nextBest.topic.mastery > 0 ? 6 : 0,
-                      masteryPct
+                      masteryPct,
                     )}%`,
                     backgroundColor: "var(--accent)",
                   }}
@@ -132,7 +223,7 @@ export function NextBestTopicCard({
             </div>
           </div>
           <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-foreground text-background transition-transform group-hover:translate-x-0.5"
+            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground text-background transition-colors group-hover:bg-foreground/90"
             aria-hidden
           >
             <ArrowRight className="h-3.5 w-3.5" weight="bold" />

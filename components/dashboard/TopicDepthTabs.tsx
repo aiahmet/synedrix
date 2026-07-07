@@ -332,7 +332,7 @@ function DepthTab({
       aria-selected={active}
       onClick={onSelect}
       className={cn(
-        "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-medium transition-all active:scale-[0.98]",
+        "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-medium transition-colors",
         active
           ? "bg-background text-foreground shadow-[var(--shadow-soft)]"
           : "text-muted-foreground hover:text-foreground"

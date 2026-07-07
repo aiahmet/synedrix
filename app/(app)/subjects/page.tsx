@@ -124,7 +124,7 @@ function OfflineFallback() {
         </div>
         <Link
           href="/dashboard"
-          className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+          className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
         >
           <Sparkle className="h-3.5 w-3.5" weight="duotone" />
           Open the cockpit

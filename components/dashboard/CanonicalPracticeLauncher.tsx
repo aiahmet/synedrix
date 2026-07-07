@@ -68,7 +68,7 @@ export function CanonicalPracticeLauncher({
       <button
         type="button"
         onClick={handleStart}
-        className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-semibold text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+        className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
       >
         <Play className="h-4 w-4" weight="fill" />
         Start baseline practice

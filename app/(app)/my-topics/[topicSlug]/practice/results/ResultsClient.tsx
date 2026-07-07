@@ -168,8 +168,10 @@ export function ResultsClient({ topicSlug }: { readonly topicSlug: string }) {
               <Link
                 href={`/tutor?subject=${encodeURIComponent(topic.subjectSlug)}&topic=${encodeURIComponent(topic.slug)}&lesson=${encodeURIComponent(run.id)}&q=${encodeURIComponent(
                   `Discuss my last practice on ${topic.title}. I got grade ${grade}.`
+                )}&from=${encodeURIComponent(
+                  `/my-topics/${topicSlug}/practice/results`
                 )}`}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-all hover:opacity-90 active:scale-[0.98]"
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-colors hover:bg-accent/90"
               >
                 <ChatCircleText className="h-3.5 w-3.5" weight="duotone" />
                 Discuss with tutor
@@ -185,7 +187,7 @@ export function ResultsClient({ topicSlug }: { readonly topicSlug: string }) {
               </button>
               <Link
                 href={`/my-topics/${topicSlug}/lesson`}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
               >
                 <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
                 Back to lesson
@@ -196,15 +198,37 @@ export function ResultsClient({ topicSlug }: { readonly topicSlug: string }) {
       </CockpitCard>
 
       <div className="flex flex-col gap-3">
-        {items.map((item: RunItem) => (
-          <ItemRow key={item.itemId} item={item} />
+        {items.map((item: RunItem, index: number) => (
+          <ItemRow
+            key={item.itemId}
+            item={item}
+            itemIndex={index}
+            runId={run.id}
+            topicSlug={topicSlug}
+            subjectSlug={topic.subjectSlug}
+            topicTitle={topic.title}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function ItemRow({ item }: { readonly item: RunItem }) {
+function ItemRow({
+  item,
+  itemIndex,
+  runId,
+  topicSlug,
+  subjectSlug,
+  topicTitle,
+}: {
+  readonly item: RunItem;
+  readonly itemIndex: number;
+  readonly runId: string;
+  readonly topicSlug: string;
+  readonly subjectSlug: string;
+  readonly topicTitle: string;
+}) {
   const verdict = item.attempt?.verdict ?? null;
   const verdictTone =
     verdict === "correct"
@@ -221,6 +245,12 @@ function ItemRow({ item }: { readonly item: RunItem }) {
           ? "wrong"
           : "no answer";
   const scorePct = item.attempt ? Math.round(item.attempt.score * 100) : 0;
+
+  // Plan §2.4: per-item "Ask tutor about this question"
+  // chip. Forwarded `?focusItemId=<itemIndex>` so the
+  // tutor thread's welcome message names the question
+  // and the AI's first reply is on-topic.
+  const focusHref = `/tutor?subject=${encodeURIComponent(subjectSlug)}&topic=${encodeURIComponent(topicSlug)}&lesson=${encodeURIComponent(runId)}&focusItemId=${itemIndex}&q=${encodeURIComponent(`Help me with question ${itemIndex + 1} on ${topicTitle}.`)}&from=${encodeURIComponent(`/my-topics/${topicSlug}/practice/results`)}`;
 
   return (
     <CockpitCard>
@@ -247,6 +277,25 @@ function ItemRow({ item }: { readonly item: RunItem }) {
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* Plan §2.4: per-item "Ask tutor about this
+            question" chip. The `?focusItemId=<index>`
+            is forwarded to the tutor thread's welcome
+            message so the AI's first reply is on the
+            specific question. Hidden on items that
+            were not answered (no `attempt` row) — a
+            blank question is not worth asking about. */}
+        {item.attempt && (
+          <Link
+            href={focusHref}
+            className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-surface-elevated px-2.5 text-[11.5px] font-medium text-foreground transition-colors hover:border-accent-border/60 hover:bg-surface"
+          >
+            <ChatCircleText
+              className="h-3 w-3"
+              weight="duotone"
+            />
+            Ask tutor about this
+          </Link>
+        )}
         <span
           className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em]"
           style={{
@@ -350,7 +399,7 @@ function NoGradeYet({ topicSlug }: { readonly topicSlug: string }) {
           </p>
           <Link
             href={`/my-topics/${topicSlug}/practice`}
-            className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+            className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
           >
             Start a practice
             <ArrowRight className="h-3.5 w-3.5" weight="bold" />

@@ -265,7 +265,7 @@ export function PracticeClient({
               setPhase("starting");
               setErrorMsg(null);
             }}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
           >
             <Pulse className="h-3.5 w-3.5" weight="duotone" />
             Retry
@@ -448,7 +448,7 @@ export function PracticeClient({
             onClick={onSubmit}
             disabled={currentAnswer.trim().length === 0}
             className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              "inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
             )}
           >
             <Sparkle className="h-3.5 w-3.5" weight="duotone" />
@@ -460,7 +460,7 @@ export function PracticeClient({
           <button
             type="button"
             onClick={onNext}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
           >
             {currentIndex + 1 < total ? (
               <>
@@ -727,7 +727,7 @@ function NoLesson({
         <button
           type="button"
           onClick={onAbandon}
-          className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+          className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
         >
           Back to lesson
         </button>

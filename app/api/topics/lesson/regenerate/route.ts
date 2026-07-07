@@ -25,6 +25,7 @@ const requestSchema = z.object({
   subjectSlug: z.string().min(1),
   gradeLevel: z.string().optional(),
   objectives: z.array(z.string()).optional(),
+  difficulty: z.union([z.literal("EASY"), z.literal("MEDIUM"), z.literal("HARD")]),
 });
 
 /**
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
         brief: input.brief,
         objectives: input.objectives ?? [],
         gradeLevel: input.gradeLevel ?? null,
-        difficulty: "MEDIUM",
+        difficulty: input.difficulty,
         depth: input.depth,
         language: "de",
       }),

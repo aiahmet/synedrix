@@ -7,22 +7,27 @@ import { api } from "@/convex/_generated/api";
 import { ChapterHeader } from "@/components/dashboard/ChapterHeader";
 import { TopicList } from "@/components/dashboard/TopicList";
 import { AddTopicForm } from "@/components/dashboard/AddTopicForm";
+import { AskTutorCta } from "@/components/dashboard/AskTutorCta";
+import { NextBestTopicCard } from "@/components/dashboard/NextBestTopicCard";
 import { ArrowLeft, Books } from "@/components/landing/icons";
 
 /**
  * ChapterDetailClient.
  *
  * The only client island on /subjects/[slug]/[chapterSlug].
- * Subscribes to the preloaded Convex query. The query returns
- * `null` for unknown slugs, so the not-found state is rendered
- * here (the page server component cannot inspect a `Preloaded`
- * value).
+ *
+ * Plan §2.4: a subject-only `AskTutorCta` is rendered
+ * below the topic list. The composer URLs to
+ * `/tutor?subject=…` (no topic) so the user lands on
+ * the subject's tutor thread. This means the tutor is
+ * reachable from every level of the curriculum map,
+ * not just from the atomic topic page.
  *
  * Composes the chapter header (breadcrumb, color band,
  * metadata) and the topic list (per-topic mastery, last
  * studied, and a Start topic CTA). The header is server-
- * renderable; only the topic list is client because its CTAs
- * need useMutation + useRouter.
+ * renderable; only the topic list is client because its
+ * CTAs need useMutation + useRouter.
  */
 export function ChapterDetailClient({
   preloaded,
@@ -52,10 +57,18 @@ export function ChapterDetailClient({
         estimatedMinutesTotal={data.aggregate.estimatedMinutesTotal}
       />
       <TopicList topics={data.topics} subject={data.subject} />
+      <NextBestTopicCard nextBest={data.nextBest} variant="post-lesson" />
       <AddTopicForm
         chapterId={data.chapter.id}
         subjectTitle={data.subject.title}
         subjectSlug={data.subject.slug}
+      />
+      <AskTutorCta
+        subject={{
+          slug: data.subject.slug,
+          title: data.subject.title,
+        }}
+        topic={null}
       />
     </div>
   );
@@ -96,7 +109,7 @@ function ChapterOrSubjectNotFound({
           </p>
           <Link
             href="/subjects"
-            className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+            className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
           >
             <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
             Back to subjects

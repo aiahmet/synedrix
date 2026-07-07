@@ -43,12 +43,25 @@ type FormMode = "idle" | "submitting" | "done" | "error";
 /**
  * AddTopicForm.
  *
- * The chapter-page "+ Add topic" entry point. Per plan
- * §6.2: 3-state button (idle → "Generating…" with a live
- * stream display of section headings as they fill in →
- * done/error). On success, navigates to
- * /my-topics/[topicSlug]/lesson where the slug is derived
+ * The chapter-page "+ Add topic" entry point. 3-state button
+ * (idle → "Generating…" with a live stream display of section
+ * headings as they fill in → done/error). On success, navigates
+ * to /my-topics/[topicSlug]/lesson where the slug is derived
  * client-side from the title.
+ *
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **No icon container.** The "Open form" prompt's `+` icon
+ *     renders at native size in the accent color (§8).
+ *
+ *   - **No bouncy CTA.** The submit and "Open form" buttons
+ *     drop `active:scale-[0.98]`.
+ *
+ *   - **`hover:bg-foreground/90`** not `hover:opacity-90` (§6).
+ *
+ *   - **Crisp focus state.** The inputs and select use
+ *     `focus:border-foreground focus:ring-1 focus:ring-foreground/40`,
+ *     not the airy 2px `focus:ring-2 focus:ring-ring`.
  *
  * Live UX: the form streams the lesson structure via
  * `experimental_useObject` from `@ai-sdk/react` v4. The
@@ -115,10 +128,6 @@ export function AddTopicForm({
 
     void (async () => {
       const startedAt = Date.now();
-      // Loop with a guard so a hung stream does not
-      // hang the button forever. The route handler
-      // commits server-side so even if the client hangs
-      // we still wrote a row.
       for (;;) {
         if (!stream.isLoading) break;
         if (Date.now() - startedAt > 120_000) {
@@ -157,13 +166,10 @@ export function AddTopicForm({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group flex w-full items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-surface-elevated/40 px-5 py-4 text-left transition-colors hover:border-ring/40 hover:bg-surface-elevated"
+          className="group flex w-full items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-surface-elevated/40 px-5 py-4 text-left transition-colors hover:border-foreground/40 hover:bg-surface"
         >
           <span className="flex items-center gap-3">
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-subtle/60 text-accent"
-              aria-hidden
-            >
+            <span className="text-accent" aria-hidden>
               <Plus className="h-4 w-4" weight="bold" />
             </span>
             <span>
@@ -225,7 +231,7 @@ export function AddTopicForm({
             disabled={disabled}
             maxLength={120}
             placeholder="Logarithmen in der Analysis"
-            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-10 w-full rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40"
           />
         </Field>
 
@@ -240,7 +246,7 @@ export function AddTopicForm({
             rows={3}
             maxLength={2000}
             placeholder="Cover the change-of-base rule and at least one worked example. End with a single worked physics example connecting to decibels."
-            className="min-h-[3.5rem] w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-h-[3.5rem] w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40"
           />
         </Field>
 
@@ -274,7 +280,7 @@ export function AddTopicForm({
               disabled={disabled}
               maxLength={4}
               placeholder="11"
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-[13px] tabular-nums text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40"
             />
           </Field>
         </div>
@@ -289,7 +295,7 @@ export function AddTopicForm({
             disabled={disabled}
             rows={3}
             placeholder="Define log as the inverse of exponential.&#10;Apply the change-of-base rule.&#10;Connect log to decibels in physics."
-            className="min-h-[3.5rem] w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-h-[3.5rem] w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40"
           />
         </Field>
 
@@ -314,7 +320,7 @@ export function AddTopicForm({
                 }
               }}
               disabled={disabled}
-              className="inline-flex h-10 items-center rounded-lg border border-border bg-surface-elevated px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center rounded-md border border-border bg-background px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
@@ -323,10 +329,10 @@ export function AddTopicForm({
               onClick={submit}
               disabled={disabled}
               className={cn(
-                "inline-flex h-10 items-center gap-2 rounded-lg px-4 text-[12.5px] font-medium transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
+                "inline-flex h-10 items-center gap-2 rounded-md px-4 text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
                 mode === "submitting"
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-foreground text-background"
+                  ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                  : "bg-foreground text-background hover:bg-foreground/90",
               )}
             >
               {mode === "submitting" ? (
@@ -357,7 +363,7 @@ export function AddTopicForm({
         {mode === "submitting" && <StreamingPreview sections={partialSections} />}
 
         {errorMsg && (
-          <p className="rounded-lg border border-subject-french/30 bg-subject-french/10 px-3 py-2 text-[12px] text-subject-french">
+          <p className="rounded-md border border-subject-french/40 bg-background px-3 py-2 text-[12px] text-subject-french">
             {errorMsg}
           </p>
         )}
@@ -377,7 +383,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </span>
       {children}
@@ -404,7 +410,7 @@ function Select({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-[13px] text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+      className="h-10 w-full rounded-md border border-border bg-background px-3 text-[13px] text-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40 disabled:opacity-60"
     >
       {children}
     </select>
@@ -418,13 +424,13 @@ function StreamingPreview({
 }) {
   if (sections.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-surface-elevated/40 px-3 py-2 text-[12px] text-muted-foreground">
+      <div className="rounded-md border border-dashed border-border bg-surface-elevated/40 px-3 py-2 text-[12px] text-muted-foreground">
         Lesson sections will appear here as the tutor types them in.
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-accent-border/40 bg-accent-subtle/20 p-3">
+    <div className="rounded-md border border-accent/40 bg-background p-3">
       <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
         Live — {sections.length} section{sections.length === 1 ? "" : "s"} so far
       </p>

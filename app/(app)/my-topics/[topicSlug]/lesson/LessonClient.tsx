@@ -73,14 +73,14 @@ export function LessonClient({
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2.5">
             <Link
               href="/my-topics"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
             >
               <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
               Back to your topics
             </Link>
             <Link
               href="/subjects"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
             >
               Browse subjects
             </Link>
@@ -168,7 +168,7 @@ export function LessonClient({
           <button
             type="button"
             onClick={onStartPractice}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-all hover:opacity-90 active:scale-[0.98]"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-colors hover:bg-accent/90"
           >
             <PlayCircle className="h-3.5 w-3.5" weight="duotone" />
             Start practice
@@ -235,7 +235,7 @@ function EmptyLesson({
         <button
           type="button"
           onClick={onStartPractice}
-          className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+          className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
         >
           <Sparkle className="h-3.5 w-3.5" weight="duotone" />
           Try starting practice

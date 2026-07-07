@@ -47,15 +47,21 @@ export interface TopicListEntry {
  * TopicList.
  *
  * Renders the topics under a single chapter. Each row is a
- * CockpitCard that shows the topic's title, a one-line
- * objective preview, exam-relevance and difficulty signals,
- * per-topic mastery bar, last-studied date, and a "Start
- * topic" CTA that fires a topic-scoped study session and
- * navigates to /tutor with subject + topic context.
+ * flat, single-layer list entry — typography does the work.
+ * The previous version triple-nested every row inside a
+ * `CockpitCard > TopicRow card > inner` stack; the rulebook
+ * (§1) lists "carded list rows" as banned.
  *
- * The CTAs are the only interactive piece. The list itself
- * is server-renderable; we use a client component here
- * because each CTA needs useMutation + useRouter.push.
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **No pill chip containers.** Difficulty, exam-relevance,
+ *     and "my topic" are plain uppercase muted text with
+ *     optional color emphasis (§1).
+ *
+ *   - **No bouncy CTA.** The "Start topic" button drops
+ *     `active:scale-[0.98]`.
+ *
+ *   - **`hover:bg-accent/90`** not `hover:opacity-90` (§6).
  */
 export function TopicList({
   topics,
@@ -70,7 +76,7 @@ export function TopicList({
   if (topics.length === 0) {
     return (
       <CockpitCard>
-        <div className="flex flex-col items-center gap-1 py-8 text-center">
+        <div className="flex flex-col items-center gap-1 py-6 text-center">
           <p className="text-[13.5px] font-medium text-foreground">
             No topics indexed yet.
           </p>
@@ -119,9 +125,6 @@ function TopicRow({
     : "Not started";
   const isUserTopic = topic.source === "user";
 
-  // User-owned topics route to the /my-topics lesson
-  // page; canonical topics route through /tutor with the
-  // study session CTA (existing behavior).
   const onStart = () => {
     if (isUserTopic) {
       startTransition(() => {
@@ -136,7 +139,11 @@ function TopicRow({
           topicId: topic.id,
           intention: `Studying ${topic.title}`,
         });
-        router.push(`/tutor?subject=${subject.slug}&topic=${topic.slug}`);
+        router.push(
+          `/tutor?subject=${subject.slug}&topic=${topic.slug}&from=${encodeURIComponent(
+            `/subjects/${subject.slug}`,
+          )}`,
+        );
       } catch (err) {
         console.error("Failed to start topic session:", err);
       }
@@ -151,9 +158,9 @@ function TopicRow({
             <h3 className="text-[14px] font-semibold tracking-tight text-foreground">
               {topic.title}
             </h3>
-            <DifficultyPill difficulty={topic.difficulty} />
-            <ExamRelevance relevance={topic.examRelevance} />
-            {isUserTopic && <MyTopicBadge />}
+            <DifficultyLabel difficulty={topic.difficulty} />
+            <ExamRelevanceLabel relevance={topic.examRelevance} />
+            {isUserTopic && <MyTopicLabel />}
           </div>
           {topic.objectives.length > 0 && (
             <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-muted-foreground">
@@ -171,7 +178,7 @@ function TopicRow({
           <div className="mt-3 flex items-center gap-3">
             <div className="h-1.5 w-full max-w-[16rem] overflow-hidden rounded-full bg-surface">
               <div
-                className={cn("h-full rounded-full transition-[width] duration-500")}
+                className="h-full rounded-full transition-[width] duration-500"
                 style={{
                   width: `${Math.max(2, pct)}%`,
                   backgroundColor: isEmpty
@@ -212,12 +219,12 @@ function TopicRow({
             onClick={onStart}
             disabled={pending}
             className={cn(
-              "inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-medium transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
+              "inline-flex h-9 items-center gap-1.5 rounded-md px-3.5 text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               isUserTopic
-                ? "bg-surface-elevated text-foreground hover:bg-surface"
+                ? "border border-border bg-background text-foreground hover:bg-surface"
                 : isEmpty
-                  ? "bg-foreground text-background hover:opacity-90"
-                  : "bg-accent text-accent-foreground hover:opacity-90"
+                  ? "bg-foreground text-background hover:bg-foreground/90"
+                  : "bg-accent text-accent-foreground hover:bg-accent/90",
             )}
           >
             {isUserTopic ? (
@@ -243,11 +250,10 @@ function TopicRow({
 }
 
 /**
- * Small pill that signals a topic's difficulty using a
- * subject-specific color token. Falls back to the global
- * accent so the signal is always visible.
+ * Difficulty label. Plain uppercase mono with a per-difficulty
+ * color, no pill container (§1).
  */
-function DifficultyPill({
+function DifficultyLabel({
   difficulty,
 }: {
   readonly difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -261,12 +267,8 @@ function DifficultyPill({
 
   return (
     <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.16em]"
-      style={{
-        backgroundColor: `color-mix(in srgb, ${colorVar} 10%, transparent)`,
-        borderColor: `color-mix(in srgb, ${colorVar} 28%, transparent)`,
-        color: colorVar,
-      }}
+      className="font-mono text-[9.5px] font-medium uppercase tracking-[0.16em]"
+      style={{ color: colorVar }}
     >
       {difficulty}
     </span>
@@ -274,19 +276,16 @@ function DifficultyPill({
 }
 
 /**
- * Small badge that signals how exam-relevant a topic is,
- * using a high-contrast mono-uppercase label.
+ * Exam-relevance label. Plain uppercase mono. Returns `null`
+ * for relevance < 1 so the label never renders as "Optional"
+ * for unreviewed topics.
  */
-function ExamRelevance({ relevance }: { readonly relevance: number }) {
+function ExamRelevanceLabel({ relevance }: { readonly relevance: number }) {
   if (relevance < 1) return null;
-
-  // Bucket the relevance score into a label so the user can
-  // skim the list without reading each number.
   const label =
     relevance >= 4 ? "High yield" : relevance >= 2 ? "Core" : "Optional";
-
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
+    <span className="inline-flex items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
       <Target className="h-2.5 w-2.5" weight="bold" />
       {label}
     </span>
@@ -294,22 +293,16 @@ function ExamRelevance({ relevance }: { readonly relevance: number }) {
 }
 
 /**
- * Small "MY TOPIC" badge used on user-source rows in the
- * chapter topic list. Subject-chemistry tone (green) so
- * it reads as "yours / authored" without conflicting
- * with the difficulty or exam-relevance pills.
+ * "MY TOPIC" label for user-source rows. Plain uppercase mono
+ * in the chemistry tone (green) so it reads as "yours /
+ * authored" without conflicting with the difficulty or
+ * exam-relevance labels.
  */
-function MyTopicBadge() {
+function MyTopicLabel() {
   return (
     <span
-      className="inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.16em]"
-      style={{
-        backgroundColor:
-          "color-mix(in srgb, var(--subject-chemistry) 10%, transparent)",
-        borderColor:
-          "color-mix(in srgb, var(--subject-chemistry) 28%, transparent)",
-        color: "var(--subject-chemistry)",
-      }}
+      className="font-mono text-[9.5px] font-medium uppercase tracking-[0.16em]"
+      style={{ color: "var(--subject-chemistry)" }}
     >
       my topic
     </span>

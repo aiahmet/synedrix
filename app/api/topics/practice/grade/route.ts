@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     skill: string;
     rubric: string[];
     lessonExcerpt: string;
+    subjectSlug: string;
   } | null;
 
   let itemContext: ItemForGrade = null;
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
       rubric: itemContext.rubric,
       userAnswer,
       language: "de",
+      subjectSlug: itemContext.subjectSlug,
     },
     runId
   );

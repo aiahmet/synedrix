@@ -64,7 +64,7 @@ export default function TopicDetailError({
             <div className="mt-3 flex flex-wrap gap-2.5">
               <button
                 onClick={reset}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
               >
                 <ArrowsClockwise className="h-3.5 w-3.5" weight="bold" />
                 Try again

@@ -171,7 +171,7 @@ export default function MyTopicsPage() {
                   ) : (
                     <Link
                       href={`/my-topics/${t.slug}/practice`}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-colors hover:bg-foreground/90"
                     >
                       <Pulse className="h-3 w-3" weight="duotone" />
                       Start practice
@@ -179,7 +179,7 @@ export default function MyTopicsPage() {
                   )}
                   <Link
                     href={`/my-topics/${t.slug}/lesson`}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3 text-[12px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3 text-[12px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                   >
                     <ArrowRight className="h-3 w-3" weight="bold" />
                     Open lesson
@@ -240,7 +240,7 @@ function EmptyState() {
           </p>
           <Link
             href="/subjects"
-            className="mt-1 inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+            className="mt-1 inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
           >
             Browse subjects
             <ArrowRight className="h-3.5 w-3.5" weight="bold" />
