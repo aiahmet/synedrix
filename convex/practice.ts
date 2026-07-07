@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 
@@ -7,23 +7,6 @@ import {
   scoreToGermanGrade,
   type GermanLetterGrade,
 } from "./_lib/grading";
-
-/**
- * practice.ts.
- *
- * Lesson-scoped practice runs. The mutations below are
- * pure-persistence: route handlers (`/api/topics/practice/*`)
- * perform the AI work and invoke these mutations with the
- * model-authored structured output. This matches the
- * existing `/api/tutor/chat` orchestration pattern
- * (AGENTS.md: AI plumbing outside the Convex surface) and
- * keeps the mutations free of fetch/streamObject.
- *
- * Decision D4: one row per *run* (`topicLessonPractice`)
- * is the bankable unit. Per-item attempts and the
- * per-answer wrongness log reuse `practiceAttempts` and
- * `mistakeEntries`.
- */
 
 const verdictArg = v.union(
   v.literal("correct"),
@@ -46,7 +29,13 @@ const mistakeTypeArg = v.union(
   v.literal("CARELESS_ERROR"),
   v.literal("FORMULA_RECALL_FAILURE"),
   v.literal("MISREAD_QUESTION"),
-  v.literal("LANGUAGE_EXPRESSION_ISSUE")
+  v.literal("LANGUAGE_EXPRESSION_ISSUE"),
+  v.literal("SIGN_ERROR"),
+  v.literal("UNIT_CONVERSION_ERROR"),
+  v.literal("GRAMMAR_ERROR"),
+  v.literal("VOCABULARY_ERROR"),
+  v.literal("REACTION_BALANCE_ERROR"),
+  v.literal("ARGUMENT_STRUCTURE_ISSUE")
 );
 
 const practiceItemShapeArg = v.object({
@@ -65,19 +54,6 @@ const gradeShapeArg = v.object({
   cause: v.union(v.string(), v.null()),
 });
 
-/**
- * startLessonPractice.
- *
- * Atomically creates a `topicLessonPractice` row +
- * a `practiceSets` row (source: "user_lesson") + N
- * `practiceItems` rows. The structured `items` list
- * comes from the AI route handler that already
- * validated it against the Zod schema.
- *
- * Validates that the lesson exists and is owned by the
- * calling user. Refuses if the lesson is canonical
- * (`source !== "user"`). Sets status = "in_progress".
- */
 export const startLessonPractice = mutation({
   args: {
     lessonId: v.id("topicLessons"),
@@ -104,7 +80,6 @@ export const startLessonPractice = mutation({
       throw new ConvexError("practice_items_empty");
     }
 
-    // Single practiceSets row keyed by the lesson + topic.
     const practiceSetId = await ctx.db.insert("practiceSets", {
       topicId: topic._id,
       title: `Practice — ${topic.title}`,
@@ -123,7 +98,7 @@ export const startLessonPractice = mutation({
         type: "user_text_answer",
         question: it.prompt,
         answer: it.expectedAnswer,
-        explanation: it.expectedAnswer, // initial; results page shows the model's "betterAnswer"
+        explanation: it.expectedAnswer,
         skills: [it.skill],
         order: i,
         source: "user_lesson",
@@ -133,11 +108,6 @@ export const startLessonPractice = mutation({
       itemIds.push(id);
     }
 
-    // Handle the resume-after-abandon path. If the user
-    // already has an in_progress run against this lesson,
-    // we abandon it and start fresh — `abandonLessonPractice`
-    // is the explicit user-driven way to resume, this is
-    // the implicit "clicked Start again" path.
     const existingInProgress = await ctx.db
       .query("topicLessonPractice")
       .withIndex("by_user_topic", (q) =>
@@ -166,23 +136,6 @@ export const startLessonPractice = mutation({
   },
 });
 
-/**
- * submitAnswerAndGrade.
- *
- * Persists the student's answer, the AI's grade, and (if
- * verdict !== "correct") a `mistakeEntries` row. Increments
- * `answeredCount` on the run.
- *
- * The `grade` arg is the structured object the route
- * handler produced and validated against the Zod schema.
- * Caller guarantees: `grade.verdict === "correct"` ⇒
- * `grade.mistakeType === null && grade.cause === null`.
- *
- * On Zod failure at the route handler (§11 of the plan)
- * the caller passes a fallback grade with verdict =
- * "partially_correct", score = 0.5, etc., so the
- * attempt is always recoverable.
- */
 export const submitAnswerAndGrade = mutation({
   args: {
     runId: v.id("topicLessonPractice"),
@@ -219,16 +172,6 @@ export const submitAnswerAndGrade = mutation({
       throw new ConvexError("empty_answer");
     }
 
-    // Enforce the verdict <-> mistakeType invariant in
-    // the contract surface so a future caller cannot
-    // violate it. Plan §5.3 + §2 D11: a "correct"
-    // verdict cannot have a tagged mistakeType or a
-    // cause; otherwise the mistake-entry shape would
-    // not match its semantic meaning. The route
-    // handler's degraded fallback (§11) is the main
-    // caller and it complies; this guard is the
-    // belt-and-suspenders check at the durable
-    // mutation layer.
     if (
       args.grade.verdict === "correct" &&
       (args.grade.mistakeType !== null ||
@@ -236,14 +179,7 @@ export const submitAnswerAndGrade = mutation({
     ) {
       throw new ConvexError("invariant_verdict_mistakeType");
     }
-    if (
-      args.grade.verdict !== "correct" &&
-      args.grade.mistakeType === null
-    ) {
-      throw new ConvexError("invariant_mistakeType_required");
-    }
 
-    // Persist the attempt.
     const attemptId = await ctx.db.insert("practiceAttempts", {
       userId: user._id,
       practiceItemId: args.itemId,
@@ -255,10 +191,6 @@ export const submitAnswerAndGrade = mutation({
       attemptedAt: Date.now(),
     });
 
-    // Write a mistake entry if the verdict warrants it.
-    // The invariant check above guarantees a non-correct
-    // verdict always carries a `mistakeType !== null`,
-    // so the conditional below is safe to dereference.
     let mistakeEntryId: Id<"mistakeEntries"> | null = null;
     if (
       args.grade.verdict !== "correct" &&
@@ -278,8 +210,6 @@ export const submitAnswerAndGrade = mutation({
       });
     }
 
-    // Bump answeredCount on the run, clamped at itemCount
-    // so a defect never inflates past the configured bound.
     const nextAnswered = Math.min(
       run.itemCount,
       run.answeredCount + 1
@@ -297,18 +227,6 @@ export const submitAnswerAndGrade = mutation({
   },
 });
 
-/**
- * finishLessonPractice.
- *
- * Marks the run graded + computes `overallScore` (mean of
- * per-item scores from the joined `practiceAttempts`) +
- * the German 1–6 letter grade.
- *
- * Throws when `answeredCount < 1` per plan §11 ("snake
- * eye: if no answeredCount > 0, throw"). Returns `null`
- * on idempotent re-finish (run is already "graded" or
- * "abandoned").
- */
 export const finishLessonPractice = mutation({
   args: { runId: v.id("topicLessonPractice") },
   returns: v.union(
@@ -327,11 +245,6 @@ export const finishLessonPractice = mutation({
     if (run.userId !== user._id) throw new ConvexError("forbidden");
     if (run.status !== "in_progress") return null;
 
-    // Pull every attempt row for this run's practiceSet
-    // items, scoped to the calling user. The
-    // `by_practice_item` index is per-item; we want per-
-    // run so an indexed collect + in-memory join is the
-    // cheapest path. N is small (5–8 items per run).
     const items = await ctx.db
       .query("practiceItems")
       .withIndex("by_practice_set", (q) =>
@@ -339,28 +252,32 @@ export const finishLessonPractice = mutation({
       )
       .collect();
 
-    const itemIds = new Set(items.map((i) => i._id));
-    const allAttempts = await ctx.db
-      .query("practiceAttempts")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+    const itemIds = Array.from(new Set(items.map((i) => i._id)));
+    const attemptRows = await Promise.all(
+      itemIds.map((itemId) =>
+        ctx.db
+          .query("practiceAttempts")
+          .withIndex("by_user_practice_item", (q) =>
+            q.eq("userId", user._id).eq("practiceItemId", itemId)
+          )
+          .collect()
+      )
+    );
 
-    // Latest attempt per item (a user could in theory
-    // re-submit; pick the most recent). The `index_range`
-    // we want here is per-item — to take the latest we
-    // sort + slice.
     const latestPerItem = new Map<
       Id<"practiceItems">,
       { score: number; attemptedAt: number }
     >();
-    for (const a of allAttempts) {
-      if (!itemIds.has(a.practiceItemId)) continue;
-      const existing = latestPerItem.get(a.practiceItemId);
-      if (!existing || a.attemptedAt > existing.attemptedAt) {
-        latestPerItem.set(a.practiceItemId, {
-          score: a.score,
-          attemptedAt: a.attemptedAt,
-        });
+    for (let idx = 0; idx < itemIds.length; idx++) {
+      const perItem = attemptRows[idx];
+      for (const a of perItem) {
+        const existing = latestPerItem.get(itemIds[idx]);
+        if (!existing || a.attemptedAt > existing.attemptedAt) {
+          latestPerItem.set(itemIds[idx], {
+            score: a.score,
+            attemptedAt: a.attemptedAt,
+          });
+        }
       }
     }
 
@@ -368,11 +285,6 @@ export const finishLessonPractice = mutation({
       throw new ConvexError("no_attempts");
     }
 
-    // Per-item mean divided by the configured itemCount,
-    // not the answeredSize — so an abandoned-mid-run state
-    // still gets a meaningful grade. Plan §11 explicitly
-    // says "if no answeredCount > 0, throw" — so non-zero
-    // is fine, just compute mean(s) / itemCount.
     const sum = Array.from(latestPerItem.values()).reduce(
       (acc, e) => acc + e.score,
       0
@@ -389,17 +301,48 @@ export const finishLessonPractice = mutation({
       grade,
     });
 
+    const now = Date.now();
+    const masteryDelta = Math.max(0, Math.min(1, overallScore * 0.25));
+    const confidenceDelta = Math.max(-0.15, Math.min(0.25, (overallScore - 0.5) * 0.2));
+    const timeSpent = Math.max(0, Math.floor((now - run.startedAt) / 1000));
+
+    const existingProgress = await ctx.db
+      .query("userTopicProgress")
+      .withIndex("by_user_topic", (q) =>
+        q.eq("userId", user._id).eq("topicId", run.topicId)
+      )
+      .first();
+
+    if (existingProgress) {
+      const newMastery = Math.max(
+        0,
+        Math.min(1, existingProgress.mastery + masteryDelta * (1 - existingProgress.mastery))
+      );
+      const newConfidence = Math.max(
+        0,
+        Math.min(1, existingProgress.confidence + confidenceDelta)
+      );
+      await ctx.db.patch(existingProgress._id, {
+        mastery: newMastery,
+        confidence: newConfidence,
+        timeSpentSec: existingProgress.timeSpentSec + timeSpent,
+        lastStudied: now,
+      });
+    } else {
+      await ctx.db.insert("userTopicProgress", {
+        userId: user._id,
+        topicId: run.topicId,
+        mastery: Math.max(0, Math.min(1, masteryDelta)),
+        confidence: Math.max(0, Math.min(1, 0.4 + confidenceDelta)),
+        timeSpentSec: timeSpent,
+        lastStudied: now,
+      });
+    }
+
     return { runId, overallScore, grade };
   },
 });
 
-/**
- * abandonLessonPractice.
- *
- * Marks the run "abandoned". Intentionally does NOT
- * compute a grade; the abandoned run remains in the
- * user's history visible from the /my-topics tile.
- */
 export const abandonLessonPractice = mutation({
   args: { runId: v.id("topicLessonPractice") },
   returns: v.null(),
@@ -417,24 +360,12 @@ export const abandonLessonPractice = mutation({
   },
 });
 
-/**
- * getLessonPracticeRun.
- *
- * Returns the run shell (status, score, grade) for the
- * /my-topics/[slug]/practice page header. Returns `null`
- * if the run does not exist or does not belong to the
- * caller.
- */
 export const getLessonPracticeRun = query({
   args: { runId: v.id("topicLessonPractice") },
   returns: v.union(
     v.object({
       id: v.id("topicLessonPractice"),
       topicId: v.id("topics"),
-      // `lessonId` is OPTIONAL in the schema (canonical-
-      // baseline practice has no lesson). Surface this as a
-      // nullable union so callers do not have to chase
-      // down the schema decision manually.
       lessonId: v.union(v.id("topicLessons"), v.null()),
       practiceSetId: v.id("practiceSets"),
       status: v.union(
@@ -459,9 +390,6 @@ export const getLessonPracticeRun = query({
     return {
       id: run._id,
       topicId: run.topicId,
-      // Canonical-baseline runs do not anchor to a
-      // `topicLessons` row. Normalise to `null` so the
-      // consumer's `?? null` fallback fires uniformly.
       lessonId: run.lessonId ?? null,
       practiceSetId: run.practiceSetId,
       status: run.status,
@@ -475,18 +403,6 @@ export const getLessonPracticeRun = query({
   },
 });
 
-/**
- * getLatestPracticeRunForOwnedTopic.
- *
- * Topic-scoped lookup so a client component can resolve
- * the right `runId` for a topic without asking the user
- * for an opaque runId they do not have. Filters by both
- * `userId` and `topicId` via the `by_user_topic` index,
- * then returns the latest run (highest `startedAt`).
- *
- * Used by `/my-topics/[topicSlug]/practice/results` to
- * pull the freshly-graded run the user just finished.
- */
 export const getLatestPracticeRunForOwnedTopic = query({
   args: { topicId: v.id("topics") },
   returns: v.union(
@@ -510,10 +426,6 @@ export const getLatestPracticeRunForOwnedTopic = query({
     const user = await resolveUser(ctx);
     if (!user) return null;
 
-    // Ownership check before we read any runs. The
-    // topic must be a user-generated topic owned by
-    // this caller; canonical topics are scoped under
-    // the regular practice flow, not this one.
     const topic = await ctx.db.get(topicId);
     if (!topic) return null;
     if (topic.source !== "user" || topic.ownerId !== user._id) return null;
@@ -540,19 +452,6 @@ export const getLatestPracticeRunForOwnedTopic = query({
   },
 });
 
-/**
- * Server-side helper used by /api/topics/practice/start
- * route handler. Reads a single `topicLessons` row plus
- * a denormalized view of the parent topic + gradeLevel
- * so the AI prompt builder has the lesson content,
- * sections, and grounding inputs in one round trip.
- *
- * Auth: the calling client passes a Clerk JWT via
- * `convex.setAuth`; this query resolves `ctx.auth` to
- * confirm the caller. The ownership check fires
- * downstream inside `startLessonPractice` so a typo on
- * `lessonId` cannot create orphaned runs.
- */
 export const getLessonForStart = query({
   args: { lessonId: v.id("topicLessons") },
   returns: v.union(
@@ -563,6 +462,7 @@ export const getLessonForStart = query({
       ),
       topicTitle: v.string(),
       gradeLevel: v.union(v.string(), v.null()),
+      subjectSlug: v.string(),
     }),
     v.null()
   ),
@@ -573,28 +473,21 @@ export const getLessonForStart = query({
     if (!lesson) return null;
     const topic = await ctx.db.get(lesson.topicId);
     if (!topic) return null;
-    // Ownership check: only the topic owner can start a
-    // practice run against a user-generated lesson.
     if (topic.source !== "user" || topic.ownerId !== user._id) {
       return null;
     }
+    const chapter = await ctx.db.get(topic.chapterId);
+    const subject = chapter ? await ctx.db.get(chapter.subjectId) : null;
     return {
       content: lesson.content,
       sections: lesson.sections,
       topicTitle: topic.title,
       gradeLevel: topic.gradeLevel ?? null,
+      subjectSlug: subject?.slug ?? "",
     };
   },
 });
 
-/**
- * Server-side helper used by /api/topics/practice/grade
- * route handler. Returns the per-item prompt, the
- * model-authored expected answer, the rubric, and the
- * lesson excerpt that grounds the question. Verifies
- * ownership of the (run, item) pair so we never grade
- * against someone else's data.
- */
 export const getItemForGrading = query({
   args: {
     runId: v.id("topicLessonPractice"),
@@ -607,6 +500,7 @@ export const getItemForGrading = query({
       skill: v.string(),
       rubric: v.array(v.string()),
       lessonExcerpt: v.string(),
+      subjectSlug: v.string(),
     }),
     v.null()
   ),
@@ -618,35 +512,21 @@ export const getItemForGrading = query({
     const item = await ctx.db.get(itemId);
     if (!item || item.practiceSetId !== run.practiceSetId) return null;
 
-    // `run.lessonId` is OPTIONAL in the schema (canonical-
-    // baseline practice does not anchor to a lesson).
-    // Grading still produces a real, useful result for
-    // canonical items: we substitute the item's expected
-    // answer as the lesson excerpt so the model has
-    // grounding even without a `topicLessons` row to draw
-    // from. The item carries its own answer key + rubric,
-    // so this is a meaningful (if shorter) prompt basis.
-    let excerpt: string;
-    if (run.lessonId !== undefined) {
+    const topic = await ctx.db.get(run.topicId);
+    const chapter = topic ? await ctx.db.get(topic.chapterId) : null;
+    const subject = chapter ? await ctx.db.get(chapter.subjectId) : null;
+
+    const LESSON_EXCERPT_CHARS = 2400;
+    const excerpt: string = await (async () => {
+      if (run.lessonId === undefined) {
+        return canonicalBlockExcerpt(ctx, run.topicId, LESSON_EXCERPT_CHARS);
+      }
       const lesson = await ctx.db.get(run.lessonId);
       if (lesson) {
-        // The excerpt the grader sees is the section whose
-        // heading most closely matches the item's skill
-        // tag, falling back to the joined lesson content
-        // if the skill does not match any heading
-        // verbatim.
-        const section = lesson.sections.find((s) =>
-          s.heading.toLowerCase().includes(item.skills[0]?.toLowerCase() ?? "")
-        );
-        excerpt = section ? section.body : lesson.content.slice(0, 1200);
-      } else {
-        // Orphaned run: lessonId points at a deleted row.
-        // Fall through to the canonical-baseline shape.
-        excerpt = item.answer.slice(0, 1200);
+        return lesson.content.slice(0, LESSON_EXCERPT_CHARS);
       }
-    } else {
-      excerpt = item.answer.slice(0, 1200);
-    }
+      return canonicalBlockExcerpt(ctx, run.topicId, LESSON_EXCERPT_CHARS);
+    })();
 
     return {
       prompt: item.question,
@@ -654,26 +534,50 @@ export const getItemForGrading = query({
       skill: item.skills[0] ?? "allgemein",
       rubric: item.rubric ?? [],
       lessonExcerpt: excerpt,
+      subjectSlug: subject?.slug ?? "",
     };
   },
 });
 
-/**
- * getLessonPracticeRunItems.
- *
- * Denormalized join suitable for the practice page and
- * the results page. Returns one entry per item in the
- * run's practice set, with the latest attempt (if any),
- * the model-authored expected answer, the rubric, and
- * any mistake entry linked back to the attempt.
- */
+async function canonicalBlockExcerpt(
+  ctx: { db: QueryCtx["db"] },
+  topicId: Id<"topics">,
+  maxChars: number
+): Promise<string> {
+  const blocks = await ctx.db
+    .query("lessonBlocks")
+    .withIndex("by_topic_depth", (q) =>
+      q.eq("topicId", topicId).eq("depth", "standard")
+    )
+    .collect();
+  if (blocks.length === 0) return "";
+  blocks.sort((a, b) => a.order - b.order);
+  return blocks
+    .map((b) => b.content)
+    .join("\n\n")
+    .slice(0, maxChars);
+}
+
 export const getLessonPracticeRunItems = query({
   args: { runId: v.id("topicLessonPractice") },
   returns: v.array(
     v.object({
       itemId: v.id("practiceItems"),
       order: v.number(),
+      type: v.union(
+        v.literal("mcq"),
+        v.literal("short_answer"),
+        v.literal("step_problem"),
+        v.literal("fill_blank"),
+        v.literal("user_text_answer"),
+        v.literal("worked_walkthrough"),
+        v.literal("essay_analysis"),
+        v.literal("translation_drill"),
+        v.literal("formula_derivation"),
+        v.literal("oral_recall"),
+      ),
       prompt: v.string(),
+      options: v.union(v.array(v.string()), v.null()),
       expectedAnswer: v.string(),
       skill: v.string(),
       rubric: v.array(v.string()),
@@ -713,33 +617,42 @@ export const getLessonPracticeRunItems = query({
       .collect();
     items.sort((a, b) => a.order - b.order);
 
-    // Pull all attempts + mistakes for this user scoped
-    // to the run's item ids. Same per-item latest-attempt
-    // join used by `finishLessonPractice`.
-    const allAttempts = await ctx.db
-      .query("practiceAttempts")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    const itemIdSet = new Set(items.map((i) => i._id));
+    const itemIdsAttempt = items.map((i) => i._id);
+    const attemptRows = await Promise.all(
+      itemIdsAttempt.map((itemId) =>
+        ctx.db
+          .query("practiceAttempts")
+          .withIndex("by_user_practice_item", (q) =>
+            q.eq("userId", user._id).eq("practiceItemId", itemId)
+          )
+          .collect()
+      )
+    );
     const attemptByItem = new Map<
       Id<"practiceItems">,
-      (typeof allAttempts)[number]
+      (typeof attemptRows)[number][number]
     >();
-    for (const a of allAttempts) {
-      if (!itemIdSet.has(a.practiceItemId)) continue;
-      const existing = attemptByItem.get(a.practiceItemId);
-      if (!existing || a.attemptedAt > existing.attemptedAt) {
-        attemptByItem.set(a.practiceItemId, a);
+    for (let idx = 0; idx < itemIdsAttempt.length; idx++) {
+      for (const a of attemptRows[idx]) {
+        const existing = attemptByItem.get(itemIdsAttempt[idx]);
+        if (!existing || a.attemptedAt > existing.attemptedAt) {
+          attemptByItem.set(itemIdsAttempt[idx], a);
+        }
       }
     }
 
-    const allMistakes = await ctx.db
+    const topicMistakes = await ctx.db
       .query("mistakeEntries")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user_topic", (q) =>
+        q.eq("userId", user._id).eq("topicId", run.topicId)
+      )
       .collect();
-    const mistakeByAttempt = new Map<Id<"practiceAttempts">, (typeof allMistakes)[number]>();
-    for (const m of allMistakes) {
-      if (m.practiceAttemptId) mistakeByAttempt.set(m.practiceAttemptId, m);
+    const attemptIdsSet = new Set(Array.from(attemptByItem.values()).map((a) => a._id));
+    const mistakeByAttempt = new Map<Id<"practiceAttempts">, (typeof topicMistakes)[number]>();
+    for (const m of topicMistakes) {
+      if (m.practiceAttemptId && attemptIdsSet.has(m.practiceAttemptId)) {
+        mistakeByAttempt.set(m.practiceAttemptId, m);
+      }
     }
 
     return items.map((item) => {
@@ -751,7 +664,9 @@ export const getLessonPracticeRunItems = query({
       return {
         itemId: item._id,
         order: item.order,
+        type: item.type,
         prompt: item.question,
+        options: item.options ?? null,
         expectedAnswer: item.answer,
         skill: item.skills[0] ?? "allgemein",
         rubric: item.rubric ?? [],
@@ -778,14 +693,6 @@ export const getLessonPracticeRunItems = query({
   },
 });
 
-// ── Canonical-baseline practice ────────────────────────
-
-/**
- * getCanonicalPracticeSet.
- *
- * Returns the canonical-baseline practice set for a topic
- * (source: "canonical_baseline"). Auth-optional.
- */
 export const getCanonicalPracticeSet = query({
   args: { topicId: v.id("topics") },
   handler: async (ctx, { topicId }) => {
@@ -823,14 +730,6 @@ export const getCanonicalPracticeSet = query({
   },
 });
 
-/**
- * startCanonicalPractice.
- *
- * Creates a `topicLessonPractice` run against the
- * canonical-baseline practice set. The canonical
- * practice set's items already exist in the database;
- * this mutation only creates the run record.
- */
 export const startCanonicalPractice = mutation({
   args: { topicId: v.id("topics") },
   returns: v.object({
@@ -854,7 +753,6 @@ export const startCanonicalPractice = mutation({
       .withIndex("by_practice_set", (q) => q.eq("practiceSetId", set._id))
       .collect();
 
-    // Abandon any previous in-progress run for this topic
     const existingRuns = await ctx.db
       .query("topicLessonPractice")
       .withIndex("by_user_topic", (q) =>
@@ -870,16 +768,6 @@ export const startCanonicalPractice = mutation({
     const runId = await ctx.db.insert("topicLessonPractice", {
       userId: user._id,
       topicId,
-      // Canonical-baseline practice has no associated
-      // `topicLessons` row — the canonical practice set
-      // already bundles its own prompts + answer key, and
-      // writing a synthetic "canonical" lesson would
-      // duplicate data the seed already encodes in the
-      // `practiceSet` and `practiceItems` rows.
-      // `lessonId` is therefore intentionally `undefined`
-      // (the schema declares it `v.optional`). Read-side
-      // queries MUST gate on `lessonId !== undefined`
-      // before dereferencing it.
       lessonId: undefined,
       practiceSetId: set._id,
       startedAt: Date.now(),

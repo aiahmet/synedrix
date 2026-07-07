@@ -1,6 +1,8 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+import { requireUser } from "./users";
+
 /**
  * upsertFromSession.
  *
@@ -90,5 +92,51 @@ export const upsertFromSession = mutation({
       });
     }
     return null;
+  },
+});
+
+export const updateConfidence = mutation({
+  args: {
+    topicId: v.id("topics"),
+    confidence: v.number(),
+  },
+  returns: v.object({
+    mastery: v.number(),
+    confidence: v.number(),
+    timeSpentSec: v.number(),
+  }),
+  handler: async (ctx, { topicId, confidence }) => {
+    const user = await requireUser(ctx);
+    const clamped = Math.max(0, Math.min(1, confidence));
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("userTopicProgress")
+      .withIndex("by_user_topic", (q) =>
+        q.eq("userId", user._id).eq("topicId", topicId)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        confidence: clamped,
+        lastStudied: now,
+      });
+      return {
+        mastery: existing.mastery,
+        confidence: clamped,
+        timeSpentSec: existing.timeSpentSec,
+      };
+    }
+
+    await ctx.db.insert("userTopicProgress", {
+      userId: user._id,
+      topicId,
+      mastery: 0,
+      confidence: clamped,
+      timeSpentSec: 0,
+      lastStudied: now,
+    });
+    return { mastery: 0, confidence: clamped, timeSpentSec: 0 };
   },
 });

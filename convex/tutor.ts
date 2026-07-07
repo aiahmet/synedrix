@@ -7,6 +7,11 @@ import {
   resolveUserReadOnly as resolveUser,
   requireUser,
 } from "./users";
+import { buildProactiveOpening } from "./tutorOpening";
+import {
+  recommendNextBest,
+  type NextBestRecommendation,
+} from "./_lib/recommendNextBest";
 
 /**
  * Minimum session length, in seconds, for the mastery
@@ -77,10 +82,6 @@ export const getThread = query({
       title: match.title ?? null,
       subjectId: match.subjectId ?? null,
       topicId: match.topicId ?? null,
-      // `messageCount` is dropped: it costs an extra
-      // `tutorMessages` scan and the only caller (TutorClient)
-      // does not need it — it already subscribes to
-      // `listMessages` for the real list.
       createdAt: match._creationTime,
       lastReadAt: match.lastReadAt ?? null,
     };
@@ -92,31 +93,13 @@ export const getThread = query({
  *
  * Returns the messages for a thread, ordered by creation time
  * ascending. The page subscribes to this with the thread id
- * returned by `getThread`. Convex returns index reads sorted
- * by `_creationTime` within a single index key, so the
- * previous in-memory sort is unnecessary.
- *
- * Optional `paginationOpts.limit` (default 200, capped 500)
- * bounds the response so a thread with thousands of
- * messages does not stall the React render on first paint.
- * The cap keeps the read constant-time for the typical
- * "first session, <100 messages" case while still giving
- * the practice-results CTA chain room to load 50-100
- * per-coroutine-debug-explanation messages without a
- * custom pagination surface.
+ * returned by `getThread`.
  */
 const LIST_MESSAGES_DEFAULT_LIMIT = 200;
 const LIST_MESSAGES_MAX_LIMIT = 500;
 export const listMessages = query({
   args: {
     threadId: v.id("tutorThreads"),
-    /**
-     * Optional. Caps the message count so a long thread
-     * does not stall hydration. Defaults to 200; the
-     * route handler / UI should not need to set this in
-     * practice — 200 covers the realistic per-thread
-     * history length by a comfortable margin.
-     */
     limit: v.optional(v.number()),
   },
   returns: v.array(
@@ -125,13 +108,15 @@ export const listMessages = query({
       role: v.union(v.literal("user"), v.literal("assistant")),
       content: v.string(),
       quotedBlock: v.union(v.string(), v.null()),
+      /** Phase 1 §3.1: structured content JSON (may be
+       *  absent for legacy messages). */
+      structuredContent: v.optional(v.string()),
     })
   ),
   handler: async (ctx, { threadId, limit }) => {
     const user = await resolveUser(ctx);
     if (!user) return [];
 
-    // Authorization: confirm the thread belongs to this user.
     const thread = await ctx.db.get(threadId);
     if (!thread || thread.userId !== user._id) return [];
 
@@ -143,14 +128,15 @@ export const listMessages = query({
       .query("tutorMessages")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
       .take(effectiveLimit);
-    // Convex returns messages sorted by _creationTime ascending
-    // from the by_thread index. No in-memory sort needed.
 
     return messages.map((m) => ({
       id: m._id,
       role: m.role,
       content: m.content,
       quotedBlock: m.quotedBlock ?? null,
+      ...(m.structuredContent
+        ? { structuredContent: m.structuredContent }
+        : {}),
     }));
   },
 });
@@ -159,9 +145,7 @@ export const listMessages = query({
  * getThreadHistory.
  *
  * Returns the message history for a thread in a compact
- * shape suitable for feeding an LLM (no Convex ids, no
- * quotedBlock). Authorization: the thread must belong to
- * the calling user.
+ * shape suitable for feeding an LLM.
  */
 export const getThreadHistory = query({
   args: {
@@ -193,19 +177,7 @@ export const getThreadHistory = query({
  * getContextForChat.
  *
  * Loads everything the tutor Route Handler needs to assemble
- * a grounded prompt: the subject, the topic (if any), the
- * user's mastery + confidence on the topic, and the last
- * few mistakes on the topic.
- *
- * Returns `null` if the subject does not exist or the thread
- * does not belong to the calling user.
- *
- * Throws `ConvexError("topic_not_found")` when the caller
- * supplied a `topicId` that does not exist (or has been
- * deleted). This used to silently degrade to a subject-only
- * thread, which dropped the user's intent and made the AI
- * answer the wrong question. The route handler maps this
- * error to a 404.
+ * a grounded prompt.
  */
 export const getContextForChat = query({
   args: {
@@ -250,7 +222,6 @@ export const getContextForChat = query({
     const user = await resolveUser(ctx);
     if (!user) return null;
 
-    // Thread ownership check.
     const thread = await ctx.db.get(threadId);
     if (!thread || thread.userId !== user._id) return null;
 
@@ -277,9 +248,6 @@ export const getContextForChat = query({
 
     if (topicId) {
       const t = await ctx.db.get(topicId);
-      // Surface a typed error when the caller asked for a topic
-      // that no longer exists. The route handler turns this
-      // into a 404 so the client can recover.
       if (!t) {
         throw new ConvexError("topic_not_found");
       }
@@ -291,7 +259,6 @@ export const getContextForChat = query({
         gradeLevel: t.gradeLevel ?? null,
       };
 
-      // Mastery for this topic, if any progress exists.
       const progress = await ctx.db
         .query("userTopicProgress")
         .withIndex("by_user_topic", (q) =>
@@ -303,18 +270,12 @@ export const getContextForChat = query({
         confidence = progress.confidence;
       }
 
-      // Last 5 mistakes on this topic, scoped to the calling
-      // user. Uses the (userId, topicId) compound index for an
-      // O(log n) scan, which is also the privacy fix: a bare
-      // `by_topic` index would leak other users' mistakes.
       const topicMistakes = await ctx.db
         .query("mistakeEntries")
         .withIndex("by_user_topic", (q) =>
           q.eq("userId", user._id).eq("topicId", topicId)
         )
         .collect();
-      // Convex returns these sorted by _creationTime ascending;
-      // we want the 5 most recent, so reverse the order.
       recentMistakes = topicMistakes
         .slice()
         .reverse()
@@ -346,17 +307,57 @@ export const getContextForChat = query({
  * welcome assistant message is appended so the user always
  * lands on a non-empty thread.
  *
- * On creation, we seed the denormalized `lastReadAt`,
- * `lastMessageAt`, and `unreadCount` fields so the sidebar's
- * first render does not need a fallback path.
+ * Phase 1 §3.3: the welcome message uses `buildProactiveOpening`
+ * from `convex/tutorOpening.ts` to generate an AI-quality
+ * opening that surfaces mastery, recent mistakes, and a
+ * concrete next step — all from Convex data available at
+ * thread-creation time.
  */
 export const ensureThread = mutation({
   args: {
     subjectId: v.id("subjects"),
     topicId: v.optional(v.id("topics")),
+    lessonContext: v.optional(
+      v.object({
+        topicTitle: v.string(),
+        lessonSummary: v.string(),
+        grade: v.union(
+          v.literal("1"),
+          v.literal("2"),
+          v.literal("3"),
+          v.literal("4"),
+          v.literal("5"),
+          v.literal("6")
+        ),
+        items: v.array(
+          v.object({
+            prompt: v.string(),
+            userAnswer: v.string(),
+            verdict: v.union(
+              v.literal("correct"),
+              v.literal("partially_correct"),
+              v.literal("incorrect")
+            ),
+            score: v.number(),
+            feedback: v.string(),
+            betterAnswer: v.string(),
+          })
+        ),
+        mistakes: v.array(
+          v.object({
+            type: v.string(),
+            cause: v.string(),
+          })
+        ),
+        focusItemId: v.optional(v.string()),
+      })
+    ),
   },
   returns: v.id("tutorThreads"),
-  handler: async (ctx, { subjectId, topicId }): Promise<Id<"tutorThreads">> => {
+  handler: async (
+    ctx,
+    { subjectId, topicId, lessonContext }
+  ): Promise<Id<"tutorThreads">> => {
     const user = await requireUser(ctx);
 
     const existing = await findThread(ctx, user._id, subjectId, topicId);
@@ -377,28 +378,164 @@ export const ensureThread = mutation({
       subjectId,
       topicId,
       title,
-      // Mark the thread as read on creation so the welcome
-      // message does not count as unread in the history sidebar.
       lastReadAt: now,
-      // Denormalized fields so the sidebar can render without a
-      // per-thread `tutorMessages` query.
       lastMessageAt: now,
       unreadCount: 0,
     });
 
-    // Seed a welcome message. The new chat prompt
-    // already teaches the model the block-marker
-    // contract; the welcome copy stays minimal so the
-    // model's own first reply — not the seed — becomes
-    // the user's first introduction to the tutor's
-    // structured teaching style.
     const cleanTitle =
       (title ?? (topicId ? "topic" : "subject"))
         .replace(/[^a-zA-Z0-9 ]/g, "")
         .trim() || (topicId ? "Topic" : "Subject");
-    const welcome = topicId
-      ? "Hi — I'm your tutor for " + cleanTitle + ". Ask me anything on the topic and I'll ground my answer in your mastery and recent mistakes. We'll start by figuring out where you are; then we'll work the concept step by step."
-      : "Hi — I'm your tutor for " + cleanTitle + ". Pick a topic to drill into, or ask anything at this subject level and I'll route it to the right curriculum.";
+
+    // Phase 1 §3.3: build a proactive opening using the
+    // `buildProactiveOpening` helper. For lesson-scoped
+    // threads we use the lesson context directly; for
+    // topic-scoped threads we pull mastery + recent mistakes
+    // from the user's progress. Subject-only threads get a
+    // simple prompt to pick a topic.
+    let welcome: string;
+
+    // ── Hoisted topic data ──────────────────────────
+    // Fetch userTopicProgress and mistakeEntries ONCE
+    // before the tone context + opening branches so both
+    // can reuse the results. `topicId` guards make these
+    // no-ops for subject-only threads (no index hit).
+    const topicProgress = topicId
+      ? await ctx.db
+          .query("userTopicProgress")
+          .withIndex("by_user_topic", (q) =>
+            q.eq("userId", user._id).eq("topicId", topicId)
+          )
+          .first()
+      : null;
+    const allTopicMistakes = topicId
+      ? await ctx.db
+          .query("mistakeEntries")
+          .withIndex("by_user_topic", (q) =>
+            q.eq("userId", user._id).eq("topicId", topicId)
+          )
+          .collect()
+      : [];
+
+    // Phase 7 §9.1: derive tone context from the user's
+    // profile + prior session signals. Uses the hoisted
+    // `topicProgress` and `allTopicMistakes` above — no
+    // duplicate queries.
+    let toneContext:
+      | {
+          returningAfterGoodSession: boolean;
+          returningAfterStrugglingSession: boolean;
+          hasExamPanicProfile: boolean;
+          studentFirstName: string | null;
+        }
+      | undefined;
+    const profile = await ctx.db
+      .query("tutorProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (profile && topicId) {
+      const DAY_MS = 86_400_000;
+      // Reuse the hoisted `topicProgress` (fetched above)
+      // instead of re-querying.
+      const masterySignal = topicProgress ? topicProgress.mastery : 0;
+      // Check for a recent completed session on this topic.
+      const priorSessions = await ctx.db
+        .query("studySessions")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("topicId"), topicId),
+            q.neq(q.field("completedAt"), undefined)
+          )
+        )
+        .order("desc")
+        .take(1);
+      const lastSession = priorSessions[0];
+      const hasRecentCompletedSession =
+        lastSession !== undefined &&
+        lastSession.completedAt !== undefined &&
+        now - lastSession.completedAt < 7 * DAY_MS;
+      // Reuse the hoisted `allTopicMistakes` (fetched
+      // above) instead of re-querying.
+      const hasRecentMistakes = allTopicMistakes.length > 0;
+
+      const returningAfterGoodSession =
+        hasRecentCompletedSession && masterySignal >= 0.5;
+      const returningAfterStrugglingSession =
+        hasRecentMistakes &&
+        (!hasRecentCompletedSession || masterySignal < 0.3);
+      toneContext = {
+        returningAfterGoodSession,
+        returningAfterStrugglingSession,
+        hasExamPanicProfile: profile.biggestObstacle === "exam_panic",
+        studentFirstName: user.name?.split(" ")[0] ?? null,
+      };
+    } else if (profile) {
+      // Subject-only thread — carry the profile flags
+      // but no session-based tone (no topic to scope to).
+      toneContext = {
+        returningAfterGoodSession: false,
+        returningAfterStrugglingSession: false,
+        hasExamPanicProfile: profile.biggestObstacle === "exam_panic",
+        studentFirstName: user.name?.split(" ")[0] ?? null,
+      };
+    }
+
+    if (lessonContext) {
+      const focusedItem = lessonContext.focusItemId
+        ? lessonContext.items.find(
+            (it, i) => String(i) === lessonContext.focusItemId
+          )
+        : null;
+      welcome = buildProactiveOpening({
+        topicTitle: cleanTitle,
+        masteryPct: 0,
+        recentMistakes: lessonContext.mistakes.map((m) => ({
+          type: m.type,
+          cause: m.cause ?? "",
+        })),
+        hasLessonContext: true,
+        lessonGrade: lessonContext.grade,
+        focusItemPrompt: focusedItem?.prompt ?? null,
+        focusItemVerdict: focusedItem?.verdict ?? null,
+      });
+    } else if (topicId) {
+      // Reuse the hoisted queries above — no duplicate
+      // fetches for topicProgress or mistakeEntries.
+      const masteryPct = topicProgress
+        ? Math.round(topicProgress.mastery * 100)
+        : 0;
+      const recentMistakes = allTopicMistakes
+        .slice()
+        .reverse()
+        .slice(0, 3)
+        .map((m) => ({
+          type: m.mistakeType,
+          cause: m.cause ?? "",
+        }));
+      welcome = buildProactiveOpening({
+        topicTitle: cleanTitle,
+        masteryPct,
+        recentMistakes,
+        hasLessonContext: false,
+        lessonGrade: null,
+        focusItemPrompt: null,
+        focusItemVerdict: null,
+        toneContext,
+      });
+    } else {
+      // Subject-only thread — when we have tone context,
+      // use a personalised opening; otherwise the existing
+      // fallback.
+      if (toneContext?.hasExamPanicProfile && toneContext.studentFirstName) {
+        welcome = `Calm and structured, ${toneContext.studentFirstName}. You're in **${cleanTitle}** — pick any topic and I'll build it in bite-sized, exam-rhythm passes. No cramming, no panic.`;
+      } else if (toneContext?.studentFirstName) {
+        welcome = `Hi ${toneContext.studentFirstName} — I'm your tutor for **${cleanTitle}**. Pick a topic to drill into, or ask anything at this subject level and I'll route it to the right curriculum.`;
+      } else {
+        welcome = `Hi — I'm your tutor for ${cleanTitle}. Pick a topic to drill into, or ask anything at this subject level and I'll route it to the right curriculum.`;
+      }
+    }
 
     await ctx.db.insert("tutorMessages", {
       threadId,
@@ -414,20 +551,12 @@ export const ensureThread = mutation({
  * appendUserMessage.
  *
  * Persists a user message to a thread and updates the
- * denormalized `lastMessageAt` on the thread (the user
- * message itself does not bump the unread count, since the
- * user wrote it). Called by the tutor Route Handler.
+ * denormalized `lastMessageAt` on the thread.
  */
 export const appendUserMessage = mutation({
   args: {
     threadId: v.id("tutorThreads"),
     content: v.string(),
-    /**
-     * Stable id from the client (the Vercel AI SDK's UIMessage.id).
-     * Used as a dedupe key: if a message with the same
-     * (threadId, clientId) already exists, the insert is a no-op
-     * so retries do not duplicate the user message.
-     */
     clientId: v.optional(v.string()),
   },
   returns: v.null(),
@@ -441,11 +570,6 @@ export const appendUserMessage = mutation({
     const trimmed = content.trim();
     if (trimmed.length === 0) return null;
 
-    // Dedupe: if the client sent the same clientId for this
-    // thread, skip. This keeps the operation idempotent in the
-    // face of client retries (network blip, double click, etc).
-    // Uses the (threadId, clientId) compound index for an O(log n)
-    // lookup instead of scanning the whole thread.
     if (clientId) {
       const existing = await ctx.db
         .query("tutorMessages")
@@ -466,9 +590,6 @@ export const appendUserMessage = mutation({
       ...(clientId ? { clientId } : {}),
     });
 
-    // Maintain the denormalized `lastMessageAt` so the sidebar
-    // can sort threads without scanning messages. The unread
-    // count is unchanged for a user message — the user wrote it.
     await ctx.db.patch(threadId, { lastMessageAt: now });
 
     return null;
@@ -479,18 +600,20 @@ export const appendUserMessage = mutation({
  * recordAssistantMessage.
  *
  * Persists a complete assistant message to a thread and
- * bumps the denormalized `lastMessageAt` and `unreadCount`
- * (assistant messages are unread from the user's perspective
- * until they open the thread). Called by the tutor Route
- * Handler after the stream has fully arrived.
+ * bumps the denormalized `lastMessageAt` and `unreadCount`.
+ *
+ * Phase 1 §3.1: accepts an optional `structuredContent` JSON
+ * blob so the `StructuredResponse` renderer can reconstruct
+ * the section-by-section layout on history re-reads.
  */
 export const recordAssistantMessage = mutation({
   args: {
     threadId: v.id("tutorThreads"),
     content: v.string(),
+    structuredContent: v.optional(v.string()),
   },
   returns: v.null(),
-  handler: async (ctx, { threadId, content }): Promise<null> => {
+  handler: async (ctx, { threadId, content, structuredContent }): Promise<null> => {
     const user = await requireUser(ctx);
     const thread = await ctx.db.get(threadId);
     if (!thread || thread.userId !== user._id) {
@@ -505,18 +628,37 @@ export const recordAssistantMessage = mutation({
       threadId,
       role: "assistant",
       content: trimmed,
+      ...(structuredContent ? { structuredContent } : {}),
     });
 
-    // Bump the denormalized `lastMessageAt` and `unreadCount`.
-    // We use `unreadCount + 1` (not an overwrite) so concurrent
-    // inserts from the same thread accumulate correctly. The
-    // max-bound of 999 keeps the sidebar display clean even if
-    // the math drifts.
     const previousUnread = thread.unreadCount ?? 0;
     await ctx.db.patch(threadId, {
       lastMessageAt: now,
       unreadCount: Math.min(999, previousUnread + 1),
     });
+
+    // Phase 6 §8.1: fire-and-forget auto-review scheduling.
+    // Scans the assistant message for `[[mistake:...]]`
+    // markers and creates `mistakeEntry` rows with
+    // `reviewAt = now + 24h`. Runs independently so a
+    // failed review write never blocks the message
+    // from being recorded.
+    ctx.scheduler
+      .runAfter(0, api.tutorAutoReview.scheduleAutoReview, {
+        threadId,
+        subjectId: thread.subjectId ?? undefined,
+        topicId: thread.topicId ?? undefined,
+        messageContent: trimmed,
+        ...(structuredContent
+          ? { structuredContent }
+          : {}),
+      })
+      .catch((err) =>
+        console.error(
+          "recordAssistantMessage: auto-review scheduling failed",
+          err
+        )
+      );
 
     return null;
   },
@@ -536,11 +678,50 @@ export const endSession = mutation({
     durationSec: v.number(),
     reflection: v.optional(v.string()),
   },
-  returns: v.null(),
+  returns: v.union(
+    v.object({
+      masteryDelta: v.number(),
+      newMastery: v.number(),
+      newConfidence: v.number(),
+      durationSec: v.number(),
+      reflection: v.union(v.string(), v.null()),
+      hadReflectionBonus: v.boolean(),
+      nextBest: v.union(
+        v.object({
+          subject: v.object({
+            slug: v.string(),
+            title: v.string(),
+            color: v.optional(v.string()),
+          }),
+          chapter: v.object({ slug: v.string(), title: v.string() }),
+          topic: v.object({
+            id: v.id("topics"),
+            slug: v.string(),
+            title: v.string(),
+            examRelevance: v.number(),
+            mastery: v.number(),
+            source: v.union(v.literal("canonical"), v.literal("user")),
+            ownerId: v.union(v.id("users"), v.null()),
+          }),
+          reason: v.string(),
+        }),
+        v.null()
+      ),
+    }),
+    v.null()
+  ),
   handler: async (
     ctx,
     { sessionId, durationSec, reflection }
-  ): Promise<null> => {
+  ): Promise<{
+    masteryDelta: number;
+    newMastery: number;
+    newConfidence: number;
+    durationSec: number;
+    reflection: string | null;
+    hadReflectionBonus: boolean;
+    nextBest: NextBestRecommendation | null;
+  } | null> => {
     const user = await requireUser(ctx);
     const session = await ctx.db.get(sessionId);
     if (!session) throw new Error("Session not found");
@@ -559,42 +740,188 @@ export const endSession = mutation({
       ...(reflection !== undefined ? { reflection } : {}),
     });
 
-    // Gate the mastery bump on a minimum session length so an
-    // accidental 2-second open-and-close does not nudge the
-    // mastery curve. Time-on-task is the input the user can
-    // trust; we reward sessions, not opens.
+    let masteryDelta = 0;
+    let newMastery = 0;
+    let newConfidence = 0;
+    let hadReflectionBonus = false;
     if (session.topicId && actualDuration >= MIN_SESSION_SEC) {
       const baseIncrement = 0.1;
       const reflectionBonus =
         reflection && reflection.trim().length > 0 ? 0.05 : 0;
       const confidenceDelta = 0.05 + (reflectionBonus > 0 ? 0.05 : 0);
+      hadReflectionBonus = reflectionBonus > 0;
+      masteryDelta = baseIncrement + reflectionBonus;
+
+      const prior = await ctx.db
+        .query("userTopicProgress")
+        .withIndex("by_user_topic", (q) =>
+          q.eq("userId", user._id).eq("topicId", session.topicId!)
+        )
+        .first();
 
       await ctx.runMutation(api.progress.upsertFromSession, {
         userId: user._id,
-        topicId: session.topicId,
-        masteryDelta: baseIncrement + reflectionBonus,
+        topicId: session.topicId!,
+        masteryDelta,
         confidenceDelta,
         timeSpentSec: actualDuration,
       });
+
+      const post = await ctx.db
+        .query("userTopicProgress")
+        .withIndex("by_user_topic", (q) =>
+          q.eq("userId", user._id).eq("topicId", session.topicId!)
+        )
+        .first();
+      newMastery = post?.mastery ?? (prior ? prior.mastery + masteryDelta : masteryDelta);
+      newConfidence = post?.confidence ?? 0;
+    } else if (session.topicId) {
+      const post = await ctx.db
+        .query("userTopicProgress")
+        .withIndex("by_user_topic", (q) =>
+          q.eq("userId", user._id).eq("topicId", session.topicId!)
+        )
+        .first();
+      newMastery = post?.mastery ?? 0;
+      newConfidence = post?.confidence ?? 0;
     }
 
-    return null;
+    let nextBestSummary: NextBestRecommendation | null = null;
+    if (session.subjectId) {
+      nextBestSummary = await recommendNextBest(ctx, {
+        userId: user._id,
+        scope: { kind: "subject", subjectId: session.subjectId },
+        excludeTopicId: session.topicId,
+      });
+    }
+
+    // Phase 2 §4.2: trigger cross-topic mistake pattern
+    // detection after the session closes and mastery is
+    // updated. Fire-and-forget — the pattern detection
+    // runs asynchronously and does not block the session
+    // end response.
+    ctx.scheduler
+      .runAfter(0, api.tutorPatterns.detect, {})
+      .catch((err) =>
+        console.error("endSession: tutorPatterns.detect failed", err)
+      );
+
+    return {
+      masteryDelta,
+      newMastery,
+      newConfidence,
+      durationSec: actualDuration,
+      reflection: reflection ?? null,
+      hadReflectionBonus,
+      nextBest: nextBestSummary,
+    };
+  },
+});
+
+/**
+ * getSubjectTopicsForEmptyState.
+ */
+export const getSubjectTopicsForEmptyState = query({
+  args: {
+    subjectId: v.id("subjects"),
+    limit: v.optional(v.number()),
+  },
+  returns: v.union(
+    v.array(
+      v.object({
+        id: v.id("topics"),
+        slug: v.string(),
+        title: v.string(),
+        chapterSlug: v.string(),
+        chapterTitle: v.string(),
+        mastery: v.number(),
+        isStudied: v.boolean(),
+        examRelevance: v.number(),
+      })
+    ),
+    v.null()
+  ),
+  handler: async (ctx, { subjectId, limit }) => {
+    const cap = Math.max(1, Math.min(limit ?? 6, 20));
+    const subject = await ctx.db.get(subjectId);
+    if (!subject) return null;
+
+    const user = await resolveUser(ctx);
+    const userId: Id<"users"> | null = user ? user._id : null;
+
+    const chapters = await ctx.db
+      .query("chapters")
+      .withIndex("by_subject_order", (q) => q.eq("subjectId", subject._id))
+      .collect();
+    chapters.sort((a, b) => a.order - b.order);
+
+    const allTopics = (
+      await Promise.all(
+        chapters.map((ch) =>
+          ctx.db
+            .query("topics")
+            .withIndex("by_chapter", (q) => q.eq("chapterId", ch._id))
+            .collect()
+        )
+      )
+    ).flat();
+
+    if (allTopics.length === 0) return [];
+
+    const progressRows =
+      userId !== null
+        ? await ctx.db
+            .query("userTopicProgress")
+            .withIndex("by_user", (q) => q.eq("userId", userId))
+            .collect()
+        : [];
+    const progressByTopic = new Map<Id<"topics">, Doc<"userTopicProgress">>();
+    for (const p of progressRows) progressByTopic.set(p.topicId, p);
+
+    const rows = allTopics
+      .map((t) => {
+        const ch = chapters.find((c) => c._id === t.chapterId);
+        if (!ch) return null;
+        const p = progressByTopic.get(t._id);
+        return {
+          id: t._id,
+          slug: t.slug,
+          title: t.title,
+          chapterSlug: ch.slug,
+          chapterTitle: ch.title,
+          mastery: p ? p.mastery : 0,
+          isStudied: p !== null,
+          examRelevance: t.examRelevance,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    rows.sort((a, b) => {
+      if (a.isStudied !== b.isStudied) return a.isStudied ? 1 : -1;
+      if (a.mastery !== b.mastery) return a.mastery - b.mastery;
+      return b.examRelevance - a.examRelevance;
+    });
+
+    return rows.slice(0, cap);
+  },
+});
+
+/**
+ * getTutorUnreadTotal.
+ */
+export const getTutorUnreadTotal = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const threads = await ctx.db.query("tutorThreads").collect();
+    let total = 0;
+    for (const t of threads) total += t.unreadCount ?? 0;
+    return Math.min(total, 999);
   },
 });
 
 /**
  * listThreadsForSidebar.
- *
- * Returns the user's tutor threads grouped by subject, with
- * the denormalized `lastMessageAt`, `unreadCount`, and a
- * computed last-message preview. This is a SINGLE query
- * against the threads table — no N+1 over messages — because
- * the denormalized fields are written on every message
- * insert.
- *
- * Threads with no `lastMessageAt` (legacy rows written before
- * the denormalization landed) fall back to `_creationTime`
- * and a synthesized "No messages yet" preview.
  */
 export const listThreadsForSidebar = query({
   args: {},
@@ -625,7 +952,6 @@ export const listThreadsForSidebar = query({
     const user = await resolveUser(ctx);
     if (!user) return [];
 
-    // Single indexed read for all of the user's threads.
     const threads = await ctx.db
       .query("tutorThreads")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -633,7 +959,6 @@ export const listThreadsForSidebar = query({
 
     if (threads.length === 0) return [];
 
-    // Resolve all subject rows we actually have threads for.
     const subjectIds = Array.from(
       new Set(
         threads
@@ -650,12 +975,6 @@ export const listThreadsForSidebar = query({
         .map((s) => [s._id, s] as const)
     );
 
-    // For the last-message preview, we still need to look up
-    // the most recent message of each thread — but only one
-    // query per thread, in parallel. (An optimization that
-    // denormalizes `lastMessagePreview` onto the thread row
-    // is a future follow-up; the current load is well under
-    // 100 threads per user.)
     const previewRows = await Promise.all(
       threads.map((t) =>
         ctx.db
@@ -680,17 +999,6 @@ export const listThreadsForSidebar = query({
       }
     });
 
-    // Build the per-thread rows from the denormalized fields.
-    //
-    // For legacy threads (written before the denormalized
-    // `unreadCount` field existed) we cannot honestly report
-    // the unread count without an extra per-thread scan, and
-    // that would defeat the purpose of having a denormalized
-    // counter. We fall back to 0 (treat as fully read) and
-    // rely on the next assistant message write to populate
-    // the field correctly from then on. The one-time cost
-    // is "legacy threads read as read" which is a safe
-    // underestimate rather than a UI-breaking over-count.
     const rows = threads.map((t) => {
       const last = previewByThread.get(t._id) ?? null;
       return {
@@ -706,9 +1014,6 @@ export const listThreadsForSidebar = query({
       };
     });
 
-    // Group by subject, then sort within each group by
-    // `lastMessageAt` desc. Sort the groups themselves by the
-    // most recent activity in the group.
     type Group = {
       subject: {
         id: Id<"subjects">;
@@ -761,13 +1066,6 @@ export const listThreadsForSidebar = query({
 
 /**
  * markThreadRead.
- *
- * Sets `lastReadAt = Date.now()` and `unreadCount = 0` on a
- * thread. Called by the client when the user opens the thread
- * in the tutor UI; the sidebar's unread count drops to zero
- * for that thread via Convex reactivity. Idempotent: repeated
- * calls just bump the timestamp forward and keep the unread
- * count at zero.
  */
 export const markThreadRead = mutation({
   args: {
@@ -787,7 +1085,3 @@ export const markThreadRead = mutation({
     return null;
   },
 });
-
-// tutor.ts imports `resolveUser` (read-only) and `requireUser`
-// (lazy-create) from `convex/users.ts`. See users.ts for the
-// auth design + the lazy-create behavior.

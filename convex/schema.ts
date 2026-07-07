@@ -330,7 +330,8 @@ export default defineSchema({
   })
     .index("by_user_topic", ["userId", "topicId"])
     .index("by_user", ["userId"])
-    .index("by_topic", ["topicId"]),
+    .index("by_topic", ["topicId"])
+    .index("by_user_lastStudied", ["userId", "lastStudied"]),
 
   /**
    * Explicit subject enrollment. The dashboard treats a subject
@@ -399,7 +400,18 @@ export default defineSchema({
       v.union(
         v.literal("canonical"),
         v.literal("user_lesson"),
-        v.literal("canonical_baseline")
+        v.literal("canonical_baseline"),
+        // Phase 3 §5.2: tutor-generated practice triggered
+        // inline by a "Generate 3 quick questions" chip
+        // inside the chat surface. Items generated this
+        // way STILL travel through the standard
+        // standard practiceSets / practiceItems /
+        // practiceAttempts pipeline so they feed the
+        // mastery curve without bespoke wiring — the
+        // session is just tracked in
+        // `inlineTutorSessions` so the runner UI can
+        // anchor it in the timeline.
+        v.literal("inline_tutor")
       )
     ),
     sourceLessonId: v.optional(v.id("topicLessons")),
@@ -430,6 +442,10 @@ export default defineSchema({
       v.literal("fill_blank"),
       v.literal("user_text_answer"),
       v.literal("worked_walkthrough"),
+      v.literal("essay_analysis"),
+      v.literal("translation_drill"),
+      v.literal("formula_derivation"),
+      v.literal("oral_recall"),
     ),
     question: v.string(),
     options: v.optional(v.array(v.string())),
@@ -438,6 +454,16 @@ export default defineSchema({
     skills: v.array(v.string()),
     order: v.number(),
     // source discriminator + source-lesson link.
+    //
+    // Note for future maintainers: the session-level
+    // `inline_tutor` source lives on the parent
+    // `practiceSets` row, NOT here. Inline-generated
+    // items reuse this union for backwards-compat and
+    // to keep `practiceItems.source` narrowly scoped to
+    // the canonical / user_lesson / canonical_baseline
+    // lineage. To find inline items, query
+    // `practiceSets.source === "inline_tutor"` and join
+    // through `practiceItems.practiceSetId`.
     source: v.optional(
       v.union(
         v.literal("canonical"),
@@ -448,8 +474,12 @@ export default defineSchema({
     sourceLessonId: v.optional(v.id("topicLessons")),
     // optional grading rubric.
     rubric: v.optional(v.array(v.string())),
+    wordCountTarget: v.optional(v.number()),
+    sourcePhrase: v.optional(v.string()),
+    startingExpression: v.optional(v.string()),
   })
     .index("by_practice_set", ["practiceSetId"])
+    .index("by_practice_set_order", ["practiceSetId", "order"])
     .index("by_source_lesson", ["sourceLessonId"]),
 
   practiceAttempts: defineTable({
@@ -470,7 +500,14 @@ export default defineSchema({
     attemptedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_practice_item", ["practiceItemId"]),
+    .index("by_practice_item", ["practiceItemId"])
+    // Phase 3 §5.2 follow-up: per-user / per-item lookup.
+    // Drives the latest-attempt fetch in
+    // `tutorPractice.getInlineSessionForRunner` and
+    // `tutorPractice.endInlineSession` so the queries
+    // stay O(1) per item instead of growing with the
+    // user's full attempt history.
+    .index("by_user_practice_item", ["userId", "practiceItemId"]),
 
   flashcardDecks: defineTable({
     topicId: v.id("topics"),
@@ -534,6 +571,12 @@ export default defineSchema({
       v.literal("FORMULA_RECALL_FAILURE"),
       v.literal("MISREAD_QUESTION"),
       v.literal("LANGUAGE_EXPRESSION_ISSUE"),
+      v.literal("SIGN_ERROR"),
+      v.literal("UNIT_CONVERSION_ERROR"),
+      v.literal("GRAMMAR_ERROR"),
+      v.literal("VOCABULARY_ERROR"),
+      v.literal("REACTION_BALANCE_ERROR"),
+      v.literal("ARGUMENT_STRUCTURE_ISSUE"),
     ),
     cause: v.optional(v.string()),
     recoveryAction: v.optional(v.string()),
@@ -589,6 +632,16 @@ export default defineSchema({
      * field existed.
      */
     clientId: v.optional(v.string()),
+    /**
+     * Phase 1 §3.1: optional structured content blob.
+     * When the route handler produces a Zod-validated
+     * `TutorResponse`, the serialised JSON is persisted
+     * here so the `StructuredResponse` renderer can
+     * reconstruct the section-by-section layout on
+     * history re-reads. `undefined` for messages
+     * written before structured output shipped.
+     */
+    structuredContent: v.optional(v.string()),
   })
     .index("by_thread", ["threadId"])
     .index("by_thread_clientId", ["threadId", "clientId"]),
@@ -597,6 +650,108 @@ export default defineSchema({
   // within a single index key, so the in-memory sort in
   // `listMessages` / `getThreadHistory` is unnecessary and has
   // been removed.
+
+  /**
+   * Phase 1 §3.2: per-session teaching strategy state.
+   * One row per active tutor session. Updated after
+   * every user → assistant turn pair by the route
+   * handler via `api.tutorStrategy.recordTurn`.
+   *
+   * `currentStrategy` is the active teaching mode
+   * (auto-switches on engagement signals).
+   *
+   * `socraticModeActive` (Phase 4 §6.3) is a user
+   * toggle: when on, the tutor NEVER gives a direct
+   * answer — it only asks guiding questions. This is
+   * conceptually distinct from `currentStrategy`
+   * because strategies auto-switch on engagement while
+   * Socratic mode is a deliberate user preference;
+   * both are stored together for one round-trip read
+   * in the route handler.
+   *
+   * `latestChoiceResponseTimeMs` + `latestChoicePickedCorrect`
+   * (Phase 4 §6.1) capture the most recent `[[choice:...]]`
+   * widget click: response time from when the choice
+   * became interactable to when the user clicked, and
+   * whether the picked label matched the correct label.
+   * Cleared after the route handler consumes them on the
+   * next chat request so the same nudge never fires twice
+   * in a row. `lastChoiceNudgeAt` is the timestamp the
+   * last nudge block was actually injected into a prompt
+   * so the route handler can suppress a duplicate nudge
+   * if the next turn re-reads the same signal.
+   *
+   * `userEngagementScore` (0-1) is derived from
+   * response length, time, and choice correctness.
+   * `strategyHistory` captures previous strategies
+   * and when they were switched.
+   */
+  teachingStrategyState: defineTable({
+    sessionId: v.id("studySessions"),
+    currentStrategy: v.union(
+      v.literal("explaining"),
+      v.literal("socratic"),
+      v.literal("example_driven"),
+      v.literal("quiz_mode"),
+      v.literal("simplifying"),
+    ),
+    lastSwitchReason: v.optional(v.string()),
+    userEngagementScore: v.number(),
+    turnsInCurrentStrategy: v.number(),
+    strategyHistory: v.array(v.object({
+      strategy: v.string(),
+      turns: v.number(),
+      switchedAt: v.number(),
+    })),
+    // Phase 4 §6.3: when true, the tutor emits only
+    // guiding questions, never direct answers.
+    socraticModeActive: v.optional(v.boolean()),
+    // Phase 4 §6.1: most-recent choice click latency /
+    // outcome. Read by the route handler to inject a
+    // "take your time" nudge when the user clicked
+    // a choice in < 2 seconds without engaging.
+    latestChoiceResponseTimeMs: v.optional(v.number()),
+    latestChoicePickedCorrect: v.optional(v.boolean()),
+    latestChoiceMessageId: v.optional(v.string()),
+    lastChoiceNudgeAt: v.optional(v.number()),
+  }).index("by_session", ["sessionId"]),
+
+  /**
+   * Phase 2 §4.2: cross-topic mistake pattern detection.
+   * One row per detected pattern. When the same mistake
+   * type appears across 3+ distinct topics, a pattern is
+   * recorded with the set of involved topic ids and a
+   * human-readable description.
+   *
+   * Patterns are detected by `api.tutorPatterns.detect`
+   * (called from `endSession` in `convex/tutor.ts`) and
+   * surfaced in the Memory panel + injected into the
+   * tutor system prompt.
+   *
+   * `resolvedAt` is set when the user addresses the
+   * pattern (e.g. the per-topic mistake count drops
+   * across the flagged topics). Optional — not all
+   * patterns are resolved.
+   */
+  mistakePatterns: defineTable({
+    userId: v.id("users"),
+    patternType: v.union(
+      v.literal("sign_error_chain"),
+      v.literal("formula_confusion"),
+      v.literal("unit_conversion_gap"),
+      v.literal("reading_comprehension"),
+      v.literal("recurring_mistake_type"),
+      v.literal("cross_topic_weakness"),
+    ),
+    /** The underlying mistake type (e.g. CALCULATION_MISTAKE). */
+    mistakeType: v.string(),
+    /** The distinct topic ids where this pattern was observed. */
+    topicIds: v.array(v.id("topics")),
+    topicCount: v.number(),
+    description: v.string(),
+    detectedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  }).index("by_user", ["userId"]),
 
   aiGenerations: defineTable({
     userId: v.id("users"),
@@ -664,6 +819,18 @@ export default defineSchema({
         v.literal("6"),
       )
     ),
+    mode: v.optional(
+      v.union(
+        v.literal("sequential"),
+        v.literal("timed"),
+        v.literal("retry_wrong"),
+        v.literal("exam_simulation"),
+      )
+    ),
+    timeLimitSec: v.optional(v.number()),
+    topicIds: v.optional(v.array(v.id("topics"))),
+    currentRound: v.optional(v.number()),
+    wrongItemIds: v.optional(v.array(v.id("practiceItems"))),
   })
     .index("by_user", ["userId"])
     .index("by_user_topic", ["userId", "topicId"])
@@ -716,5 +883,61 @@ export default defineSchema({
     name: v.string(),
     mimeType: v.string(),
     size: v.number(),
-  }).index("by_user", ["userId"])
+  }).index("by_user", ["userId"]),
+
+  /**
+   * inlineTutorSessions — Phase 3 §5.2.
+   *
+   * One row per inline practice session the student
+   * triggers from the tutor chat surface (`Generate 3
+   * quick questions`). The actual practice items LIVE in
+   * the standard `practiceSets` / `practiceItems` /
+   * `practiceAttempts` tables (flagged with
+   * `source === "inline_tutor"`); this table only tracks
+   * the SESSION metadata + the timeline anchor so the
+   * InlinePractice tile renders in the right gap in the
+   * chat history.
+   *
+   * `anchorMessageId` is the tutor message id the
+   * session is anchored to — the MessageList sandwich
+   * renders the tile AFTER that message.
+   *
+   * `completedAt` is set when all items are answered;
+   * `overallScore` is the 0..1 mean score across items
+   * and `grade` is the German Gymnasium 1-6 letter
+   * derived from it.
+   *
+   * Per-item grading state is held in `practiceAttempts`
+   * rows joined through `practiceItemId` →
+   * `practiceItems.practiceSetId === session.practiceSetId`.
+   */
+  inlineTutorSessions: defineTable({
+    threadId: v.id("tutorThreads"),
+    subjectId: v.id("subjects"),
+    topicId: v.optional(v.id("topics")),
+    practiceSetId: v.id("practiceSets"),
+    /**
+     * The tutor message id the session is anchored to.
+     * The MessageList renders the InlinePractice tile
+     * AFTER this message in the timeline. Stored as a
+     * `v.string()` (not `v.id("tutorMessages")`) so we
+     * can decouple the anchor from any future
+     * data-model change to the messages table.
+     */
+    anchorMessageId: v.string(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    overallScore: v.optional(v.number()),
+    grade: v.optional(
+      v.union(
+        v.literal("1"),
+        v.literal("2"),
+        v.literal("3"),
+        v.literal("4"),
+        v.literal("5"),
+        v.literal("6")
+      )
+    ),
+  })
+    .index("by_thread_started", ["threadId", "startedAt"]),
 });

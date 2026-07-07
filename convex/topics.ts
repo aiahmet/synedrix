@@ -4,26 +4,6 @@ import type { Id } from "./_generated/dataModel";
 
 import { requireUser, resolveUserReadOnly as resolveUser } from "./users";
 
-/**
- * topics.ts.
- *
- * Decision D1 (locked in docs/USER-TOPIC-LESSON-PLAN.md §2):
- * student-created topics live in the canonical `topics`
- * table with the `source: "user"` discriminator + an
- * `ownerId` reference. There is no parallel `userTopics`
- * table. Per AGENTS.md: "exactly one name per concept
- * everywhere." `Topic` is `Topic`.
- *
- * Mutations call AI OUT OF BAND: the streaming route
- * handler at `/api/topics/lesson/stream` produces the
- * structured `LessonShape` (live UX) and then invokes
- * `createUserTopic` server-side with the validated
- * lesson. This matches the existing `/api/tutor/chat`
- * pattern and keeps mutations free of AI plumbing noise
- * (per AGENTS.md "business logic in Convex / lib",
- * strictly enforced).
- */
-
 const depthArg = v.union(
   v.literal("simple"),
   v.literal("standard"),
@@ -51,15 +31,6 @@ const lessonShapeArg = v.object({
   ),
 });
 
-/**
- * Slug uniqueness helper.
- *
- * Generates a kebab-case slug from a title and, on
- * collision, appends `-2`, `-3`, … until it lands on a
- * free slug. Indexed look-up (`by_slug`) keeps this
- * O(collision-count) per call — well under the
- * student-pruned insertion rate.
- */
 async function uniqueSlug(
   ctx: MutationCtx,
   base: string
@@ -310,6 +281,10 @@ export const listUserTopicsByOwner = query({
     })
   ),
   handler: async (ctx, { ownerId }) => {
+    const user = await resolveUser(ctx);
+    if (!user) return [];
+    if (user._id !== ownerId) return [];
+
     const topics = await ctx.db
       .query("topics")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -393,6 +368,9 @@ export const getBySlugAndOwner = query({
     v.null()
   ),
   handler: async (ctx, { slug, ownerId }) => {
+    const user = await resolveUser(ctx);
+    if (!user) return null;
+    if (user._id !== ownerId) return null;
     const topic = await ctx.db
       .query("topics")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
@@ -421,19 +399,6 @@ export const getBySlugAndOwner = query({
   },
 });
 
-/**
- * getOwnedTopicBySlug.
- *
- * Server-side ownership-aware lookup. The lesson,
- * practice, and results pages `useQuery` this with the
- * page's `topicSlug` URL param; ownership is enforced
- * here against the Clerk identity so client components
- * never have to ask for `ownerId`.
- *
- * Returns `null` for canonical topics or topics owned
- * by a different user. Canonical resolution goes
- * through `api.subjects.getTopicBySlug` instead.
- */
 export const getOwnedTopicBySlug = query({
   args: { slug: v.string() },
   returns: v.union(
@@ -481,10 +446,6 @@ export const getOwnedTopicBySlug = query({
     const subject = await ctx.db.get(chapter.subjectId);
     if (!subject) return null;
 
-    // Look up the latest lesson version for this topic
-    // so the practice page can start without an extra
-    // round trip. Returns null if the user has not
-    // generated a lesson yet.
     const lessons = await ctx.db
       .query("topicLessons")
       .withIndex("by_topic", (q) => q.eq("topicId", topic._id))
@@ -527,5 +488,44 @@ export const getOwnedTopicBySlug = query({
       subjectTitle: subject.title,
       latestLesson,
     };
+  },
+});
+
+export const markMastered = mutation({
+  args: { topicId: v.id("topics") },
+  returns: v.id("userTopicProgress"),
+  handler: async (ctx, { topicId }) => {
+    const user = await requireUser(ctx);
+
+    const topic = await ctx.db.get(topicId);
+    if (!topic) throw new ConvexError("topic_not_found");
+    if (topic.source === "user") {
+      throw new ConvexError("user_topic_mastery_via_practice");
+    }
+
+    const existing = await ctx.db
+      .query("userTopicProgress")
+      .withIndex("by_user_topic", (q) =>
+        q.eq("userId", user._id).eq("topicId", topicId)
+      )
+      .first();
+
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        mastery: 1,
+        lastStudied: now,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("userTopicProgress", {
+      userId: user._id,
+      topicId,
+      mastery: 1,
+      confidence: 0,
+      timeSpentSec: 0,
+      lastStudied: now,
+    });
   },
 });

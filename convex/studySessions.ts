@@ -6,26 +6,6 @@ import {
   requireUser,
 } from "./users";
 
-/**
- * start.
- *
- * Creates a new study session row for the current user on the
- * given subject. Optionally scoped to a specific topic. The
- * session is created in an "open" state (no `completedAt`, no
- * reflection, no duration yet) and is later closed by `complete`.
- *
- * Used by the "Start a study session" CTA on /subjects/[slug]
- * and the "Start topic" CTA on /subjects/[slug]/[chapterSlug].
- * The session is recorded against the user even if the user is
- * not yet formally enrolled in the subject, so the cockpit can
- * still surface the activity. The SubjectHeader CTA on
- * /subjects/[slug] is gated by `enrolled`, but the TopicRow
- * "Start topic" CTA on /subjects/[slug]/[chapterSlug] is not
- * — the page is reachable for any curriculum topic, so we
- * accept sessions from unenrolled users there.
- *
- * Returns the new session id.
- */
 export const start = mutation({
   args: {
     subjectId: v.id("subjects"),
@@ -39,15 +19,9 @@ export const start = mutation({
   ): Promise<Id<"studySessions">> => {
     const user = await requireUser(ctx);
 
-    // Validate the subject actually exists so we never write a
-    // dangling foreign key.
     const subject = await ctx.db.get(subjectId);
     if (!subject) throw new Error("Subject not found");
 
-    // If a topicId is provided, also validate it exists and that
-    // it belongs to a chapter in the same subject. We do the
-    // cross-check so a malformed caller cannot start a session
-    // that points at a topic from a different subject.
     if (topicId) {
       const topic = await ctx.db.get(topicId);
       if (!topic) throw new Error("Topic not found");
@@ -68,17 +42,6 @@ export const start = mutation({
   },
 });
 
-/**
- * complete.
- *
- * Closes an open study session. Sets `completedAt` to now,
- * records the duration in seconds, and optionally stores the
- * user's reflection. Intended to be called when the user ends
- * a session from the tutor or review page.
- *
- * Idempotent: completing an already-completed session is a no-op
- * (we do not overwrite a previous reflection with empty data).
- */
 export const complete = mutation({
   args: {
     sessionId: v.id("studySessions"),
@@ -96,10 +59,6 @@ export const complete = mutation({
     if (session.userId !== user._id) throw new Error("Forbidden");
     if (session.completedAt !== undefined) return null;
 
-    // 24h cap on a single session — anything longer is almost
-    // certainly a tab the user forgot to close. Matches the cap
-    // in tutor.endSession so the two entry points behave
-    // consistently.
     const actualDuration = Math.max(
       0,
       Math.min(Math.floor(durationSec), 24 * 60 * 60)
@@ -113,14 +72,6 @@ export const complete = mutation({
   },
 });
 
-/**
- * getByIdForCurrentUser.
- *
- * Returns a session if and only if it belongs to the current
- * user; otherwise `null`. Used by the /tutor page to validate
- * the `?session=...` query param so the UI does not render the
- * "Active session" chrome for a session the user does not own.
- */
 export const getByIdForCurrentUser = query({
   args: {
     sessionId: v.id("studySessions"),
@@ -148,6 +99,107 @@ export const getByIdForCurrentUser = query({
   },
 });
 
-// studySessions.ts imports `resolveUser` (read-only) and
-// `requireUser` (lazy-create) from `convex/users.ts`. See users.ts
-// for the auth design + the lazy-create behavior.
+export const getActiveForCurrentUser = query({
+  args: {},
+  returns: v.object({
+    session: v.union(
+      v.object({
+        id: v.id("studySessions"),
+        subjectId: v.union(v.id("subjects"), v.null()),
+        topicId: v.union(v.id("topics"), v.null()),
+        intention: v.union(v.string(), v.null()),
+        href: v.string(),
+      }),
+      v.null()
+    ),
+    practice: v.union(
+      v.object({
+        id: v.id("topicLessonPractice"),
+        topicId: v.id("topics"),
+        href: v.string(),
+        answeredCount: v.number(),
+        itemCount: v.number(),
+      }),
+      v.null()
+    ),
+  }),
+  handler: async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return { session: null, practice: null };
+
+    const recentSessions = await ctx.db
+      .query("studySessions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .take(20);
+    const inProgressSessions = recentSessions
+      .filter((s) => s.completedAt === undefined)
+      .sort((a, b) => b._creationTime - a._creationTime);
+    const topSession = inProgressSessions[0] ?? null;
+
+    let sessionOut: {
+      id: Id<"studySessions">;
+      subjectId: Id<"subjects"> | null;
+      topicId: Id<"topics"> | null;
+      intention: string | null;
+      href: string;
+    } | null = null;
+    if (topSession) {
+      const [subject, topic] = await Promise.all([
+        topSession.subjectId ? ctx.db.get(topSession.subjectId) : Promise.resolve(null),
+        topSession.topicId ? ctx.db.get(topSession.topicId) : Promise.resolve(null),
+      ]);
+      const params = new URLSearchParams();
+      if (subject) params.set("subject", subject.slug);
+      if (topic) params.set("topic", topic.slug);
+      if (topSession._id) {
+        params.set("session", String(topSession._id));
+      }
+      sessionOut = {
+        id: topSession._id,
+        subjectId: topSession.subjectId ?? null,
+        topicId: topSession.topicId ?? null,
+        intention: topSession.intention ?? null,
+        href: `/tutor?${params.toString()}`,
+      };
+    }
+
+    const recentRuns = await ctx.db
+      .query("topicLessonPractice")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .take(20);
+    const inProgressRuns = recentRuns
+      .filter((r) => r.status === "in_progress")
+      .sort((a, b) => b.startedAt - a.startedAt);
+    const topRun = inProgressRuns[0] ?? null;
+
+    let practiceOut: {
+      id: Id<"topicLessonPractice">;
+      topicId: Id<"topics">;
+      href: string;
+      answeredCount: number;
+      itemCount: number;
+    } | null = null;
+    if (topRun) {
+      const topic = await ctx.db.get(topRun.topicId);
+      if (topic) {
+        const chapter = await ctx.db.get(topic.chapterId);
+        const subject = chapter ? await ctx.db.get(chapter.subjectId) : null;
+        if (chapter && subject) {
+          const href =
+            topic.source === "user"
+              ? `/my-topics/${topic.slug}/practice`
+              : `/subjects/${subject.slug}/${chapter.slug}/${topic.slug}`;
+          practiceOut = {
+            id: topRun._id,
+            topicId: topic._id,
+            href,
+            answeredCount: topRun.answeredCount,
+            itemCount: topRun.itemCount,
+          };
+        }
+      }
+    }
+
+    return { session: sessionOut, practice: practiceOut };
+  },
+});

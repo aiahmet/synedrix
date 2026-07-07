@@ -50,7 +50,13 @@ const mistakeTypeArg = v.union(
   v.literal("CARELESS_ERROR"),
   v.literal("FORMULA_RECALL_FAILURE"),
   v.literal("MISREAD_QUESTION"),
-  v.literal("LANGUAGE_EXPRESSION_ISSUE")
+  v.literal("LANGUAGE_EXPRESSION_ISSUE"),
+  v.literal("SIGN_ERROR"),
+  v.literal("UNIT_CONVERSION_ERROR"),
+  v.literal("GRAMMAR_ERROR"),
+  v.literal("VOCABULARY_ERROR"),
+  v.literal("REACTION_BALANCE_ERROR"),
+  v.literal("ARGUMENT_STRUCTURE_ISSUE")
 );
 
 export const getContextForLessonRun = query({

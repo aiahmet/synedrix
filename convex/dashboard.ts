@@ -2,28 +2,10 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 
-/**
- * getOverview.
- *
- * One query that powers the whole dashboard. Returns either a
- * populated cockpit or `isEmpty: true` for new users who have not
- * enrolled in any subjects yet.
- *
- * Streak is computed from completed study sessions. Due counts come
- * from flashcard reviews whose `dueAt` has passed. Overall mastery
- * is the mean of per-topic mastery across all topics the user has
- * ever touched (so an empty state is also a 0-mastery state).
- *
- * Subject enrollment source of truth is the `userSubjects` table.
- * For users who have any explicit enrollment rows, those are used
- * directly. For legacy users who studied before `userSubjects`
- * existed, we fall back to deriving enrollment from any existing
- * `userTopicProgress` so they do not see an empty cockpit just
- * because the table is new. Mastery is always computed from
- * `userTopicProgress` regardless of how enrollment was determined.
- */
 export const getOverview = query({
-  args: {},
+  args: {
+    timeZone: v.optional(v.string()),
+  },
   returns: v.object({
     user: v.union(
       v.object({
@@ -55,7 +37,7 @@ export const getOverview = query({
     }),
     isEmpty: v.boolean(),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, { timeZone }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       return emptyOverview();
@@ -72,9 +54,6 @@ export const getOverview = query({
     const userId: Id<"users"> = user._id;
     const now = Date.now();
 
-    // Fan out the four independent reads in parallel: progress,
-    // enrollments, all subjects, all sessions. The `chapters`
-    // and `topics` per-subject counts happen below.
     const [allProgress, enrollments, subjectsRaw, sessions] = await Promise.all([
       ctx.db
         .query("userTopicProgress")
@@ -91,11 +70,6 @@ export const getOverview = query({
         .collect(),
     ]);
 
-    // Build the set of enrolled subject ids. If the user has any
-    // explicit enrollments, use those exclusively. If they have
-    // none but have legacy progress, fall back to subjects-with-
-    // progress so the cockpit does not go empty for users who
-    // studied before this table existed.
     type SubjectAcc = {
       subject: Doc<"subjects">;
       masterySum: number;
@@ -117,27 +91,23 @@ export const getOverview = query({
       }
     }
 
-    // Resolve every distinct topic the user has any progress on
-    // in a single parallel pass. The (topicId) -> subjectId
-    // map is used both by the legacy-fallback enrollment build
-    // and the mastery loop below.
     const allTopicIds = Array.from(
       new Set(allProgress.map((p) => p.topicId))
     );
-    const topicRows = await Promise.all(
-      allTopicIds.map((id) => ctx.db.get(id))
-    );
+    const TOPIC_LOAD_BATCH = 200;
+    const topicRows = allTopicIds.length > 0
+      ? (await Promise.all(
+          allTopicIds.slice(0, TOPIC_LOAD_BATCH).map((id) => ctx.db.get(id))
+        ))
+      : [];
     const topicToSubject = new Map<Id<"topics">, Id<"subjects">>();
-    // Cache chapters so two topics in the same chapter do not
-    // each pay a `db.get` roundtrip. The cache is built
-    // synchronously after the parallel pass.
     const chapterCache = new Map<Id<"chapters">, Doc<"chapters">>();
-    const chapterIdsToFetch = new Set<Id<"chapters">>();
-    for (const topic of topicRows) {
-      if (topic) chapterIdsToFetch.add(topic.chapterId);
-    }
+    const CH_LOAD_BATCH = 100;
+    const uniqueChapterIds = Array.from(
+      new Set(topicRows.filter(Boolean).map((t) => t!.chapterId))
+    ).slice(0, CH_LOAD_BATCH);
     const chapterRows = await Promise.all(
-      Array.from(chapterIdsToFetch).map((id) => ctx.db.get(id))
+      uniqueChapterIds.map((id) => ctx.db.get(id))
     );
     for (const chapter of chapterRows) {
       if (chapter) chapterCache.set(chapter._id, chapter);
@@ -163,10 +133,6 @@ export const getOverview = query({
       }
     }
 
-    // Single pass over `allProgress` to compute both the
-    // overall mastery mean and the per-subject mastery means.
-    // Replaces the previous O(n^2) `allProgress.filter(...)`
-    // loop with an O(n) reduce.
     let overallMasterySum = 0;
     const perTopicMastery = new Map<Id<"topics">, { sum: number; n: number }>();
     for (const p of allProgress) {
@@ -183,36 +149,55 @@ export const getOverview = query({
       const subjectIdForTopic = topicToSubject.get(topicId);
       if (!subjectIdForTopic) continue;
       const acc = subjectMap.get(subjectIdForTopic);
-      if (!acc) continue; // not enrolled
+      if (!acc) continue;
       acc.masterySum += agg.sum / agg.n;
       acc.topicsStudied += 1;
     }
 
-    // Per-subject total topic counts. Parallelize per subject
-    // (each subject triggers a chapters query, each chapter a
-    // topics query; we fire them all at once and aggregate).
     const totalTopicsBySubject = new Map<Id<"subjects">, number>();
-    await Promise.all(
-      subjectsRaw.map(async (subj) => {
-        const chapters = await ctx.db
+    const subjectIds = subjectsRaw.map((s) => s._id);
+    const chapterLists = await Promise.all(
+      subjectIds.map((subjId) =>
+        ctx.db
           .query("chapters")
-          .withIndex("by_subject", (q) => q.eq("subjectId", subj._id))
-          .collect();
-        const topicCounts = await Promise.all(
-          chapters.map((ch) =>
+          .withIndex("by_subject", (q) => q.eq("subjectId", subjId))
+          .collect()
+      )
+    );
+    const chapterIdsPerSubject = new Map<Id<"subjects">, Id<"chapters">[]>();
+    for (let i = 0; i < subjectIds.length; i++) {
+      chapterIdsPerSubject.set(
+        subjectIds[i],
+        chapterLists[i].map((ch) => ch._id)
+      );
+    }
+    const allChapterIds = Array.from(
+      new Set(
+        chapterLists.flat().map((ch) => ch._id)
+      )
+    );
+    const TOPIC_BATCH = 300;
+    const topicCountLists = allChapterIds.length > 0
+      ? await Promise.all(
+          allChapterIds.slice(0, TOPIC_BATCH).map((chId) =>
             ctx.db
               .query("topics")
-              .withIndex("by_chapter", (q) => q.eq("chapterId", ch._id))
+              .withIndex("by_chapter", (q) => q.eq("chapterId", chId))
               .collect()
-              .then((rows) => rows.length)
           )
-        );
-        totalTopicsBySubject.set(
-          subj._id,
-          topicCounts.reduce((s, n) => s + n, 0)
-        );
-      })
-    );
+        )
+      : [];
+    const chapterTopicCounts = new Map<Id<"chapters">, number>();
+    for (let i = 0; i < Math.min(allChapterIds.length, TOPIC_BATCH); i++) {
+      chapterTopicCounts.set(allChapterIds[i], topicCountLists[i].length);
+    }
+    for (const [subjId, chIds] of chapterIdsPerSubject) {
+      let sum = 0;
+      for (const chId of chIds) {
+        sum += chapterTopicCounts.get(chId) ?? 0;
+      }
+      totalTopicsBySubject.set(subjId, sum);
+    }
 
     const subjects = Array.from(subjectMap.values())
       .map((entry) => {
@@ -233,7 +218,6 @@ export const getOverview = query({
       })
       .sort((a, b) => b.mastery - a.mastery);
 
-    // Due counts from flashcard reviews. Run in parallel.
     const [dueReviews, dueReviewsNext] = await Promise.all([
       ctx.db
         .query("flashcardReviews")
@@ -252,11 +236,12 @@ export const getOverview = query({
         .collect(),
     ]);
 
-    // Streak from completed study sessions.
     const completedTimes = sessions
       .map((s) => s.completedAt)
       .filter((t): t is number => typeof t === "number");
-    const streak = computeStreak(completedTimes, now);
+    const streak = computeStreak(completedTimes, now, {
+      timeZone: timeZone ?? "UTC",
+    });
 
     const topicsTotal = Array.from(totalTopicsBySubject.values()).reduce(
       (s, n) => s + n,
@@ -298,12 +283,6 @@ export const getOverview = query({
         dueTomorrow: dueReviewsNext.length,
         streakDays: streak,
         overallMastery,
-        // Count distinct topics the user has any progress on,
-        // not the total number of progress rows. Without this
-        // a user who studies the same topic 5 times would see
-        // 5 topics studied, which inflates the stat and makes
-        // it diverge from the per-subject `topicsStudied` count
-        // (which is per-topic).
         topicsStudied: perTopicMastery.size,
         topicsTotal,
       },
@@ -312,45 +291,53 @@ export const getOverview = query({
   },
 });
 
-/**
- * Compute the user's current streak (consecutive days ending today
- * with at least one completed study session).
- *
- * Returns 0 if the user has never studied or if the most recent
- * session is older than yesterday. We use the UTC day boundary so
- * the result is deterministic across timezones and matches what
- * Convex stores (UTC). A user studying at 11pm local time on the
- * last day of a month will have that session attributed to the
- * following UTC day — an acceptable trade-off for a personal
- * tool, and the alternative (per-user timezone) requires a
- * timezone field on the user record that the rest of the app
- * does not need.
- */
 function computeStreak(
   completedAtTimes: readonly number[],
-  nowMs: number
+  nowMs: number,
+  options: { readonly timeZone: string }
 ): number {
   if (completedAtTimes.length === 0) return 0;
 
-  // Use an integer day count (UTC) as the Set key. It is
-  // sortable, hashable, and immune to off-by-one string bugs
-  // (the old `${y}-${m}-${d}` key was fragile around month and
-  // day boundaries with no leading zero).
-  const DAY_MS = 86_400_000;
-  const dayKey = (ms: number) => Math.floor(ms / DAY_MS);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: options.timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const dayKey = (ms: number): string => {
+    try {
+      return formatter.format(new Date(ms));
+    } catch {
+      const d = new Date(ms);
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    }
+  };
+  const dayBefore = (d: string): string => {
+    const parts = d.split("-");
+    if (parts.length !== 3) return d;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const day = Number(parts[2]);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(day)) {
+      return d;
+    }
+    const probe = Date.UTC(y, m - 1, day - 1, 12, 0, 0);
+    return dayKey(probe);
+  };
+
   const today = dayKey(nowMs);
-  const yesterday = today - 1;
-
   const days = new Set(completedAtTimes.map(dayKey));
-  if (!days.has(today) && !days.has(yesterday)) return 0;
 
-  let cursor = days.has(today) ? today : yesterday;
+  let cursor = today;
+  if (!days.has(cursor)) {
+    cursor = dayBefore(cursor);
+    if (!days.has(cursor)) return 0;
+  }
   let streak = 0;
-  // Hard cap to avoid infinite loop on a corrupt set.
-  for (let i = 0; i < 365; i++) {
+  for (let i = 0; i < 366; i++) {
     if (days.has(cursor)) {
       streak++;
-      cursor -= 1;
+      cursor = dayBefore(cursor);
     } else {
       break;
     }
@@ -373,3 +360,258 @@ function emptyOverview() {
     isEmpty: true,
   };
 }
+
+const ACTIVITY_HARD_CAP = 100;
+
+export const getContinueStudying = query({
+  args: {},
+  returns: v.union(
+    v.object({
+      subject: v.object({
+        id: v.id("subjects"),
+        slug: v.string(),
+        title: v.string(),
+        color: v.optional(v.string()),
+        icon: v.optional(v.string()),
+      }),
+      chapter: v.object({
+        id: v.id("chapters"),
+        slug: v.string(),
+        title: v.string(),
+      }),
+      topic: v.object({
+        id: v.id("topics"),
+        slug: v.string(),
+        title: v.string(),
+        mastery: v.number(),
+        confidence: v.number(),
+        difficulty: v.union(
+          v.literal("EASY"),
+          v.literal("MEDIUM"),
+          v.literal("HARD")
+        ),
+        source: v.union(v.literal("canonical"), v.literal("user")),
+        ownerId: v.union(v.id("users"), v.null()),
+      }),
+      lastStudiedAt: v.number(),
+    }),
+    v.null()
+  ),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+    if (!user) return null;
+
+    const MASTERY_DONE_THRESHOLD = 0.85;
+    const CONT_TAKE = 2000;
+    const allProgress = await ctx.db
+      .query("userTopicProgress")
+      .withIndex("by_user_lastStudied", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(CONT_TAKE);
+    const candidates = allProgress
+      .filter(
+        (p): p is typeof p & { lastStudied: number } =>
+          typeof p.lastStudied === "number" &&
+          p.mastery < MASTERY_DONE_THRESHOLD
+      );
+    if (candidates.length === 0) return null;
+
+    const top = candidates[0];
+    const topic = await ctx.db.get(top.topicId);
+    if (!topic) return null;
+    const chapter = await ctx.db.get(topic.chapterId);
+    if (!chapter) return null;
+    const subject = await ctx.db.get(chapter.subjectId);
+    if (!subject) return null;
+    const topicSource = (topic.source ?? "canonical") as
+      | "canonical"
+      | "user";
+
+    return {
+      subject: {
+        id: subject._id,
+        slug: subject.slug,
+        title: subject.title,
+        color: subject.color,
+        icon: subject.icon,
+      },
+      chapter: {
+        id: chapter._id,
+        slug: chapter.slug,
+        title: chapter.title,
+      },
+      topic: {
+        id: topic._id,
+        slug: topic.slug,
+        title: topic.title,
+        mastery: top.mastery,
+        confidence: top.confidence,
+        difficulty: topic.difficulty,
+        source: topicSource,
+        ownerId: topic.ownerId ?? null,
+      },
+      lastStudiedAt: top.lastStudied,
+    };
+  },
+});
+
+export const getRecentActivity = query({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(
+    v.object({
+      kind: v.union(
+        v.literal("session"),
+        v.literal("practice"),
+        v.literal("tutor")
+      ),
+      at: v.number(),
+      title: v.string(),
+      subtitle: v.string(),
+      href: v.string(),
+      tone: v.optional(v.string()),
+    })
+  ),
+  handler: async (ctx, { limit }) => {
+    const cap = Math.max(1, Math.min(limit ?? 5, 12));
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+    if (!user) return [];
+
+    const [sessions, runs, threads] = await Promise.all([
+      ctx.db
+        .query("studySessions")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .take(ACTIVITY_HARD_CAP),
+      ctx.db
+        .query("topicLessonPractice")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .take(ACTIVITY_HARD_CAP),
+      ctx.db
+        .query("tutorThreads")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .take(ACTIVITY_HARD_CAP),
+    ]);
+
+    type Entry = {
+      kind: "session" | "practice" | "tutor";
+      at: number;
+      title: string;
+      subtitle: string;
+      href: string;
+      tone?: string;
+    };
+    const out: Entry[] = [];
+
+    for (const s of sessions) {
+      if (typeof s.completedAt !== "number") continue;
+      const subject = s.subjectId ? await ctx.db.get(s.subjectId) : null;
+      const topic = s.topicId ? await ctx.db.get(s.topicId) : null;
+      out.push({
+        kind: "session",
+        at: s.completedAt,
+        title: subject?.title ?? "Study session",
+        subtitle: topic?.title ?? "Subject overview",
+        href: subject ? `/subjects/${subject.slug}` : "/dashboard",
+        tone: subject?.color,
+      });
+    }
+
+  const gradedRuns = runs.filter((r) => r.status === "graded" && r.grade !== undefined);
+  const ungradedRuns = runs.filter((r) => r.status !== "graded" || r.grade === undefined);
+  const mergedRuns = [...gradedRuns, ...ungradedRuns.slice(0, cap - gradedRuns.length)];
+  for (const r of mergedRuns.slice(0, cap)) {
+    const topic = await ctx.db.get(r.topicId);
+    if (!topic) continue;
+    const isUserOwned =
+      topic.source === "user" && topic.ownerId === user._id;
+    const isGraded = r.status === "graded" && r.grade !== undefined;
+    const prefix = isGraded ? `Practice graded ${r.grade}` : "Practice started";
+
+    if (isUserOwned) {
+      out.push({
+        kind: "practice",
+        at: r.completedAt ?? r.startedAt,
+        title: prefix,
+        subtitle: topic.title,
+        href: `/my-topics/${topic.slug}/practice/results`,
+      });
+      continue;
+    }
+
+    const chapter = await ctx.db.get(topic.chapterId);
+    if (!chapter) continue;
+    const subject = await ctx.db.get(chapter.subjectId);
+    if (!subject) continue;
+    out.push({
+      kind: "practice",
+      at: r.completedAt ?? r.startedAt,
+      title: prefix,
+      subtitle: `${subject.title} · ${topic.title}`,
+      href: `/subjects/${subject.slug}/${chapter.slug}/${topic.slug}`,
+      tone: subject.color,
+    });
+  }
+
+  const sortedThreads = [...threads].sort((a, b) => {
+    const atA = a.lastMessageAt ?? a._creationTime;
+    const atB = b.lastMessageAt ?? b._creationTime;
+    return atB - atA;
+  });
+  for (const thread of sortedThreads.slice(0, 3)) {
+    const subject = thread.subjectId
+      ? await ctx.db.get(thread.subjectId)
+      : null;
+    const topic = thread.topicId
+      ? await ctx.db.get(thread.topicId)
+      : null;
+    const at = thread.lastMessageAt ?? thread._creationTime;
+    const slug = subject?.slug ?? "";
+    const params = new URLSearchParams();
+    if (slug) params.set("subject", slug);
+    const topicIsUserOwned =
+      topic !== null &&
+      topic.source === "user" &&
+      topic.ownerId === user._id;
+    if (!topicIsUserOwned && topic?.slug) params.set("topic", topic.slug);
+    out.push({
+      kind: "tutor",
+      at,
+      title: topic?.title ?? subject?.title ?? "Tutor",
+      subtitle: "Discussed with tutor",
+      href: `/tutor?${params.toString()}`,
+      tone: subject?.color,
+    });
+  }
+
+    out.sort((a, b) => b.at - a.at);
+    return out.slice(0, cap);
+  },
+});
+
+export const listOwnedTopicsForCurrentUser = query({
+  args: {},
+  returns: v.object({ count: v.number() }),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { count: 0 };
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+    if (!user) return { count: 0 };
+    const owned = await ctx.db
+      .query("topics")
+      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
+      .collect();
+    return { count: owned.length };
+  },
+});

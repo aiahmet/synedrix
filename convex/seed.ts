@@ -1,5 +1,6 @@
 import { mutation } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
+import { resolveUserReadOnly as resolveUser } from "./users";
 
 type WorkedExampleSeed = { readonly setup: string; readonly solution: string; readonly skill: string; };
 type CommonMistakeSeed = { readonly mistake: string; readonly correction: string; readonly cause: string; };
@@ -52,7 +53,7 @@ function vs(term: string, definition: string, gender?: "m" | "f" | "n", example?
 }
 
 function block(title: string, depth: "simple"|"standard"|"rigorous", content: string, opts?: { we?: WorkedExampleSeed[]; cm?: CommonMistakeSeed[]; f?: FormulaSeed[]; v?: VocabularySeed[] }): LessonSeed {
-  return { depth, order: 1, title, content, workedExamples: opts?.we, commonMistakes: opts?.cm, formulas: opts?.f, vocabulary: opts?.v };
+  return { depth, order: depth === "simple" ? 0 : depth === "standard" ? 1 : 2, title, content, workedExamples: opts?.we, commonMistakes: opts?.cm, formulas: opts?.f, vocabulary: opts?.v };
 }
 
 interface TopicOpts {
@@ -448,6 +449,8 @@ export const seedIfEmpty = mutation({
     lessonBlocksInserted: v.number(),
   }),
   handler: async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return { subjectsInserted: 0, chaptersInserted: 0, topicsInserted: 0, lessonBlocksInserted: 0 };
     let subjectsInserted = 0, chaptersInserted = 0, topicsInserted = 0, lessonBlocksInserted = 0;
 
     for (const subject of CANONICAL_SUBJECTS) {

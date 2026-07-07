@@ -7,8 +7,10 @@
  * separates pre-seeded content from user-generated decks.
  */
 
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+
+import { requireUser } from "./users";
 
 
 /**
@@ -71,5 +73,63 @@ export const listByTopic = query({
       description: d.description,
       source: (d.source ?? "canonical") as string,
     }));
+  },
+});
+
+/**
+ * generateFromMessage.
+ *
+ * Phase 6 §8.2: called by the `/api/tutor/flashcards` route
+ * handler after the AI has extracted key term/definition
+ * pairs from the message text. Atomically writes:
+ *
+ *   - a `flashcardDecks` row (source: "user")
+ *   - N `flashcards` rows
+ *
+ * The caller (route handler) is responsible for the AI
+ * extraction — this mutation is pure persistence.
+ *
+ * `topicId` is the subject-level topic the flashcards
+ * are associated with (for per-topic deck listing).
+ */
+export const generateFromMessage = mutation({
+  args: {
+    topicId: v.id("topics"),
+    title: v.string(),
+    cards: v.array(
+      v.object({
+        front: v.string(),
+        back: v.string(),
+      })
+    ),
+  },
+  returns: v.object({
+    deckId: v.id("flashcardDecks"),
+    cardCount: v.number(),
+  }),
+  handler: async (ctx, { topicId, title, cards }) => {
+    const user = await requireUser(ctx);
+
+    if (cards.length === 0) {
+      throw new Error("cards_must_not_be_empty");
+    }
+
+    const deckId = await ctx.db.insert("flashcardDecks", {
+      topicId,
+      title,
+      generatedById: user._id,
+      source: "user",
+    });
+
+    for (let i = 0; i < cards.length; i++) {
+      await ctx.db.insert("flashcards", {
+        deckId,
+        front: cards[i].front,
+        back: cards[i].back,
+        order: i,
+      });
+    }
+
+    return { deckId, cardCount: cards.length };
   },
 });
