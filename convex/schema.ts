@@ -610,6 +610,8 @@ export default defineSchema({
     // treat the thread as fully unread if `lastReadAt` is
     // missing, or fully read if `lastReadAt` is set.
     unreadCount: v.optional(v.number()),
+    /** Denormalized preview of the most recent message (first 200 chars). */
+    lastMessagePreview: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
     // Hot path: getOrCreateThread needs to find the existing
@@ -916,14 +918,6 @@ export default defineSchema({
     subjectId: v.id("subjects"),
     topicId: v.optional(v.id("topics")),
     practiceSetId: v.id("practiceSets"),
-    /**
-     * The tutor message id the session is anchored to.
-     * The MessageList renders the InlinePractice tile
-     * AFTER this message in the timeline. Stored as a
-     * `v.string()` (not `v.id("tutorMessages")`) so we
-     * can decouple the anchor from any future
-     * data-model change to the messages table.
-     */
     anchorMessageId: v.string(),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -940,4 +934,21 @@ export default defineSchema({
     ),
   })
     .index("by_thread_started", ["threadId", "startedAt"]),
+
+  sessionTemplates: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    subjectId: v.optional(v.id("subjects")),
+    intentionHint: v.optional(v.string()),
+    targetMinutes: v.optional(v.number()),
+  }).index("by_user", ["userId"]),
+
+  rescuePlans: defineTable({
+    userId: v.id("users"),
+    plan: v.string(),
+    priorityTopics: v.array(v.id("topics")),
+    generatedAt: v.number(),
+    expiresAt: v.number(),
+  }).index("by_user", ["userId"]),
 });

@@ -2,11 +2,17 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
+import {
+  resolveFlashcardReviewChains,
+  resolveMistakeReviewChains,
+  collectFormulaPacks,
+  collectVocabularyDecks,
+} from "./_lib/reviewHelpers";
+import { resolveTopicChains } from "./_lib/topicChain";
+import type { QueueItem } from "./_lib/reviewTypes";
 
 const DAY_MS = 86_400_000;
 const WEAK_MASTERY_THRESHOLD = 0.5;
-const TOPIC_BATCH = 300;
-const CH_BATCH = 100;
 
 export const getReviewQueue = query({
   args: {},
@@ -45,7 +51,15 @@ export const getReviewQueue = query({
     const now = Date.now();
     const userId: Id<"users"> = user._id;
 
-    const [profile, enrollments] = await Promise.all([
+    // Fetch raw data in parallel
+    const [
+      profile,
+      enrollments,
+      overdueFlashcards,
+      dueTodayFlashcards,
+      overdueMistakes,
+      dueTodayMistakes,
+    ] = await Promise.all([
       ctx.db
         .query("tutorProfiles")
         .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -54,20 +68,12 @@ export const getReviewQueue = query({
         .query("userSubjects")
         .withIndex("by_user", (q) => q.eq("userId", userId))
         .collect(),
-    ]);
-
-    const [
-      overdueFlashcards,
-      dueTodayFlashcards,
-      overdueMistakes,
-      dueTodayMistakes,
-    ] = await Promise.all([
       ctx.db
         .query("flashcardReviews")
         .withIndex("by_user_due", (q) =>
           q.eq("userId", userId).lt("dueAt", now)
         )
-        .take(200),
+        .take(100),
       ctx.db
         .query("flashcardReviews")
         .withIndex("by_user_due", (q) =>
@@ -76,13 +82,13 @@ export const getReviewQueue = query({
             .gte("dueAt", now)
             .lt("dueAt", now + DAY_MS)
         )
-        .take(200),
+        .take(100),
       ctx.db
         .query("mistakeEntries")
         .withIndex("by_user_review", (q) =>
           q.eq("userId", userId).lt("reviewAt", now)
         )
-        .take(200),
+        .take(100),
       ctx.db
         .query("mistakeEntries")
         .withIndex("by_user_review", (q) =>
@@ -91,154 +97,36 @@ export const getReviewQueue = query({
             .gte("reviewAt", now)
             .lt("reviewAt", now + DAY_MS)
         )
-        .take(200),
+        .take(100),
     ]);
 
-    const flashcardIds = new Set([
-      ...overdueFlashcards.map((r) => r.flashcardId),
-      ...dueTodayFlashcards.map((r) => r.flashcardId),
-    ]);
-    const flashcardRows = flashcardIds.size > 0
-      ? await Promise.all(Array.from(flashcardIds).map((id) => ctx.db.get(id)))
-      : [];
-    const flashcardMap = new Map<
-      Id<"flashcards">,
-      NonNullable<(typeof flashcardRows)[number]>
-    >();
-    for (const fc of flashcardRows) {
-      if (fc) flashcardMap.set(fc._id, fc);
-    }
-
-    const deckIds = new Set(
-      Array.from(flashcardMap.values()).map((fc) => fc.deckId)
+    // Resolve flashcard + mistake chain via helpers
+    const flashcardResult = await resolveFlashcardReviewChains(
+      ctx,
+      overdueFlashcards,
+      dueTodayFlashcards
     );
-    const deckRows = deckIds.size > 0
-      ? await Promise.all(Array.from(deckIds).map((id) => ctx.db.get(id)))
-      : [];
-    const deckMap = new Map<
-      Id<"flashcardDecks">,
-      NonNullable<(typeof deckRows)[number]>
-    >();
-    for (const d of deckRows) {
-      if (d) deckMap.set(d._id, d);
-    }
-
-    const topicIdsFromDecks = new Set(
-      Array.from(deckMap.values()).map((d) => d.topicId)
-    );
-    const mistakeTopicIds = new Set(
-      [...overdueMistakes, ...dueTodayMistakes]
-        .map((m) => m.topicId)
-        .filter((id): id is Id<"topics"> => id !== undefined)
-    );
-    const allReviewTopicIds = new Set([
-      ...topicIdsFromDecks,
-      ...mistakeTopicIds,
-    ]);
-
-    const topicRows = allReviewTopicIds.size > 0
-      ? await Promise.all(
-          Array.from(allReviewTopicIds).map((id) => ctx.db.get(id))
-        )
-      : [];
-    const topicMap = new Map<
-      Id<"topics">,
-      NonNullable<(typeof topicRows)[number]>
-    >();
-    for (const t of topicRows) {
-      if (t) topicMap.set(t._id, t);
-    }
-
-    const chapterIds = new Set(
-      Array.from(topicMap.values()).map((t) => t.chapterId)
-    );
-    const chapterRows = chapterIds.size > 0
-      ? await Promise.all(Array.from(chapterIds).map((id) => ctx.db.get(id)))
-      : [];
-    const chapterMap = new Map<
-      Id<"chapters">,
-      NonNullable<(typeof chapterRows)[number]>
-    >();
-    for (const ch of chapterRows) {
-      if (ch) chapterMap.set(ch._id, ch);
-    }
-
-    const subjectIds = new Set(
-      Array.from(chapterMap.values()).map((ch) => ch.subjectId)
-    );
-    const subjectRows = subjectIds.size > 0
-      ? await Promise.all(Array.from(subjectIds).map((id) => ctx.db.get(id)))
-      : [];
-    const subjectMap = new Map<
-      Id<"subjects">,
-      NonNullable<(typeof subjectRows)[number]>
-    >();
-    for (const s of subjectRows) {
-      if (s) subjectMap.set(s._id, s);
-    }
-
-    const resolveTopicPath = (
-      topic: NonNullable<(typeof topicRows)[number]>
-    ) => {
-      const chapter = chapterMap.get(topic.chapterId);
-      const subject = chapter
-        ? subjectMap.get(chapter.subjectId)
-        : null;
-      return { chapter, subject };
-    };
-
-    type QueueItem = {
-      kind: "flashcard" | "mistake" | "weak_topic" | "formula_pack" | "vocabulary_deck";
-      priority: number;
-      at: number;
-      title: string;
-      subtitle: string;
-      href: string;
-      subjectSlug: string | null;
-      subjectColor: string | null;
-      count: number | null;
-      topicId: Id<"topics"> | null;
-    };
+    const { overdueByTopic, dueTodayByTopic } =
+      await resolveMistakeReviewChains(
+        ctx,
+        overdueMistakes,
+        dueTodayMistakes,
+        flashcardResult.topicMap,
+      );
 
     const items: QueueItem[] = [];
-
-    const dedupeKey = (kind: string, key: string) => `${kind}::${key}`;
     const seen = new Set<string>();
+    const dedupeKey = (kind: string, key: string) => `${kind}::${key}`;
 
-    const overdueFlashcardsByDeck = new Map<Id<"flashcardDecks">, number>();
-    for (const r of overdueFlashcards) {
-      const fc = flashcardMap.get(r.flashcardId);
-      if (!fc) continue;
-      overdueFlashcardsByDeck.set(
-        fc.deckId,
-        (overdueFlashcardsByDeck.get(fc.deckId) ?? 0) + 1
-      );
-    }
-    const dueTodayFlashcardsByDeck = new Map<Id<"flashcardDecks">, number>();
-    for (const r of dueTodayFlashcards) {
-      const fc = flashcardMap.get(r.flashcardId);
-      if (!fc) continue;
-      dueTodayFlashcardsByDeck.set(
-        fc.deckId,
-        (dueTodayFlashcardsByDeck.get(fc.deckId) ?? 0) + 1
-      );
-    }
-    const overdueMistakesByTopic = new Map<Id<"topics">, number>();
-    for (const m of overdueMistakes) {
-      if (!m.topicId) continue;
-      overdueMistakesByTopic.set(
-        m.topicId,
-        (overdueMistakesByTopic.get(m.topicId) ?? 0) + 1
-      );
-    }
-    const dueTodayMistakesByTopic = new Map<Id<"topics">, number>();
-    for (const m of dueTodayMistakes) {
-      if (!m.topicId) continue;
-      dueTodayMistakesByTopic.set(
-        m.topicId,
-        (dueTodayMistakesByTopic.get(m.topicId) ?? 0) + 1
-      );
-    }
+    // Build flashcard queue items (using maps from flashcardResult)
+    const {
+      flashcardMap,
+      deckMap,
+      topicMap,
+      resolveTopicPath,
+      overdueByDeck,
+      dueTodayByDeck,
+    } = flashcardResult;
 
     for (const review of overdueFlashcards) {
       const fc = flashcardMap.get(review.flashcardId);
@@ -251,13 +139,15 @@ export const getReviewQueue = query({
       const key = dedupeKey("flashcard", deck._id);
       if (seen.has(key)) continue;
       seen.add(key);
-      const overdueInDeck = overdueFlashcardsByDeck.get(deck._id) ?? 0;
+      const overdueInDeck = overdueByDeck.get(deck._id) ?? 0;
       items.push({
         kind: "flashcard",
         priority: 1.0,
         at: review.dueAt,
         title: deck.title,
-        subtitle: `${overdueInDeck} card${overdueInDeck === 1 ? "" : "s"} overdue${subject ? ` · ${subject.title}` : ""}`,
+        subtitle: `${overdueInDeck} card${
+          overdueInDeck === 1 ? "" : "s"
+        } overdue${subject ? ` · ${subject.title}` : ""}`,
         href: subject
           ? `/subjects/${subject.slug}/${topic.slug}?review=flashcards`
           : `/subjects?review=flashcards`,
@@ -279,13 +169,15 @@ export const getReviewQueue = query({
       const key = dedupeKey("flashcard", deck._id);
       if (seen.has(key)) continue;
       seen.add(key);
-      const dueInDeck = dueTodayFlashcardsByDeck.get(deck._id) ?? 0;
+      const dueInDeck = dueTodayByDeck.get(deck._id) ?? 0;
       items.push({
         kind: "flashcard",
         priority: 0.8,
         at: review.dueAt,
         title: deck.title,
-        subtitle: `${dueInDeck} card${dueInDeck === 1 ? "" : "s"} due today${subject ? ` · ${subject.title}` : ""}`,
+        subtitle: `${dueInDeck} card${
+          dueInDeck === 1 ? "" : "s"
+        } due today${subject ? ` · ${subject.title}` : ""}`,
         href: subject
           ? `/subjects/${subject.slug}/${topic.slug}?review=flashcards`
           : `/subjects?review=flashcards`,
@@ -296,6 +188,7 @@ export const getReviewQueue = query({
       });
     }
 
+    // Build mistake queue items (using topicMap + resolveTopicPath)
     for (const mistake of overdueMistakes) {
       const topic = mistake.topicId
         ? topicMap.get(mistake.topicId)
@@ -312,14 +205,16 @@ export const getReviewQueue = query({
         priority: 1.0,
         at: mistake.reviewAt ?? mistake._creationTime,
         title: topic?.title ?? "Mistake review",
-        subtitle: `${mistake.mistakeType.replace(/_/g, " ").toLowerCase()}${subject ? ` · ${subject.title}` : ""}`,
+        subtitle: `${mistake.mistakeType
+          .replace(/_/g, " ")
+          .toLowerCase()}${subject ? ` · ${subject.title}` : ""}`,
         href: topic
           ? `/subjects/${subject?.slug ?? ""}/${topic.slug}?review=mistakes`
           : "/subjects?review=mistakes",
         subjectSlug: subject?.slug ?? null,
         subjectColor: subject?.color ?? null,
         count: mistake.topicId
-          ? (overdueMistakesByTopic.get(mistake.topicId) ?? 0)
+          ? (overdueByTopic.get(mistake.topicId) ?? 0)
           : 0,
         topicId: topic?._id ?? null,
       });
@@ -341,46 +236,49 @@ export const getReviewQueue = query({
         priority: 0.8,
         at: mistake.reviewAt ?? mistake._creationTime,
         title: topic?.title ?? "Mistake review",
-        subtitle: `${mistake.mistakeType.replace(/_/g, " ").toLowerCase()}${subject ? ` · ${subject.title}` : ""}`,
+        subtitle: `${mistake.mistakeType
+          .replace(/_/g, " ")
+          .toLowerCase()}${subject ? ` · ${subject.title}` : ""}`,
         href: topic
           ? `/subjects/${subject?.slug ?? ""}/${topic.slug}?review=mistakes`
           : "/subjects?review=mistakes",
         subjectSlug: subject?.slug ?? null,
         subjectColor: subject?.color ?? null,
         count: mistake.topicId
-          ? (dueTodayMistakesByTopic.get(mistake.topicId) ?? 0)
+          ? (dueTodayByTopic.get(mistake.topicId) ?? 0)
           : 0,
         topicId: topic?._id ?? null,
       });
     }
 
+    // Weak topics — use resolveTopicChains (batch) instead of per-row N+1
     const enrolledSubjectIds = enrollments.map((e) => e.subjectId);
     const gradeLevel = profile?.grade ?? null;
 
     const progress = await ctx.db
       .query("userTopicProgress")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    const weakCandidates = progress.filter(
-      (p) => p.mastery < WEAK_MASTERY_THRESHOLD
-    );
-    weakCandidates.sort((a, b) => a.mastery - b.mastery);
+      .take(500); // CAP: was .collect()
+
+    const weakCandidates = progress
+      .filter((p) => p.mastery < WEAK_MASTERY_THRESHOLD)
+      .sort((a, b) => a.mastery - b.mastery)
+      .slice(0, 6); // CAP: was 8
+
+    const weakIds = weakCandidates.map((p) => p.topicId);
+    const weakChains = await resolveTopicChains(ctx, weakIds);
 
     let weakTopicCount = 0;
-    for (const wp of weakCandidates.slice(0, 8)) {
-      const topic = await ctx.db.get(wp.topicId);
-      if (!topic) continue;
+    for (const wp of weakCandidates) {
+      const chain = weakChains.get(wp.topicId);
+      if (!chain) continue;
+      const { topic, chapter, subject } = chain;
       if (topic.source === "user" && topic.ownerId !== userId) continue;
-      const chapter = await ctx.db.get(topic.chapterId);
-      if (!chapter) continue;
-      const subject = await ctx.db.get(chapter.subjectId);
-      if (!subject) continue;
       if (
         enrolledSubjectIds.length > 0 &&
         !enrolledSubjectIds.includes(subject._id)
       )
         continue;
-
       if (
         topic.gradeLevel &&
         gradeLevel !== null &&
@@ -404,122 +302,13 @@ export const getReviewQueue = query({
       });
     }
 
+    // Formula packs + vocabulary decks via helpers
     if (enrolledSubjectIds.length > 0) {
-      const formulaSheets = await Promise.all(
-        enrolledSubjectIds.slice(0, 5).map(async (subjId) => {
-          const chapters = await ctx.db
-            .query("chapters")
-            .withIndex("by_subject", (q) => q.eq("subjectId", subjId))
-            .take(CH_BATCH);
-          const topicLists = await Promise.all(
-            chapters.map((ch) =>
-              ctx.db
-                .query("topics")
-                .withIndex("by_chapter", (q) => q.eq("chapterId", ch._id))
-                .take(TOPIC_BATCH)
-            )
-          );
-          const allTopics = topicLists.flat();
-          const resourceRows = await Promise.all(
-            allTopics.slice(0, 50).map((t) =>
-              ctx.db
-                .query("topicResources")
-                .withIndex("by_topic_kind", (q) =>
-                  q.eq("topicId", t._id).eq("kind", "formula_sheet")
-                )
-                .first()
-            )
-          );
-          return { subjId, resources: resourceRows.filter(Boolean) };
-        })
-      );
-
-      for (const { subjId, resources } of formulaSheets) {
-        for (const resource of resources) {
-          if (!resource) continue;
-          const topic = await ctx.db.get(resource.topicId);
-          if (!topic) continue;
-          const chapter =
-            chapterMap.get(topic.chapterId) ??
-            (await ctx.db.get(topic.chapterId));
-          const key = dedupeKey("formula_pack", resource._id);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const subject = subjectMap.get(subjId);
-          items.push({
-            kind: "formula_pack",
-            priority: 0.5,
-            at: resource.updatedAt,
-            title: `Formulas: ${topic.title}`,
-            subtitle: `${resource.contents.length} formula${resource.contents.length === 1 ? "" : "s"}${subject ? ` · ${subject.title}` : ""}`,
-            href: subject && chapter
-              ? `/subjects/${subject.slug}/${chapter.slug}/${topic.slug}?tab=formulas`
-              : "/subjects",
-            subjectSlug: subject?.slug ?? null,
-            subjectColor: subject?.color ?? null,
-            count: resource.contents.length,
-            topicId: topic._id,
-          });
-        }
-      }
-
-      const vocabDecks = await Promise.all(
-        enrolledSubjectIds.slice(0, 5).map(async (subjId) => {
-          const chapters = await ctx.db
-            .query("chapters")
-            .withIndex("by_subject", (q) => q.eq("subjectId", subjId))
-            .take(CH_BATCH);
-          const topicLists = await Promise.all(
-            chapters.map((ch) =>
-              ctx.db
-                .query("topics")
-                .withIndex("by_chapter", (q) => q.eq("chapterId", ch._id))
-                .take(TOPIC_BATCH)
-            )
-          );
-          const allTopics = topicLists.flat();
-          const resourceRows = await Promise.all(
-            allTopics.slice(0, 50).map((t) =>
-              ctx.db
-                .query("topicResources")
-                .withIndex("by_topic_kind", (q) =>
-                  q.eq("topicId", t._id).eq("kind", "vocabulary_deck")
-                )
-                .first()
-            )
-          );
-          return { subjId, resources: resourceRows.filter(Boolean) };
-        })
-      );
-
-      for (const { subjId, resources } of vocabDecks) {
-        for (const resource of resources) {
-          if (!resource) continue;
-          const topic = await ctx.db.get(resource.topicId);
-          if (!topic) continue;
-          const chapter =
-            chapterMap.get(topic.chapterId) ??
-            (await ctx.db.get(topic.chapterId));
-          const key = dedupeKey("vocabulary_deck", resource._id);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const subject = subjectMap.get(subjId);
-          items.push({
-            kind: "vocabulary_deck",
-            priority: 0.5,
-            at: resource.updatedAt,
-            title: `Vocabulary: ${topic.title}`,
-            subtitle: `${resource.contents.length} term${resource.contents.length === 1 ? "" : "s"}${subject ? ` · ${subject.title}` : ""}`,
-            href: subject && chapter
-              ? `/subjects/${subject.slug}/${chapter.slug}/${topic.slug}?tab=vocabulary`
-              : "/subjects",
-            subjectSlug: subject?.slug ?? null,
-            subjectColor: subject?.color ?? null,
-            count: resource.contents.length,
-            topicId: topic._id,
-          });
-        }
-      }
+      const [formulaItems, vocabItems] = await Promise.all([
+        collectFormulaPacks(ctx, enrolledSubjectIds, seen, 5),
+        collectVocabularyDecks(ctx, enrolledSubjectIds, seen, 5),
+      ]);
+      items.push(...formulaItems, ...vocabItems);
     }
 
     items.sort((a, b) => b.priority - a.priority || a.at - b.at);

@@ -7,15 +7,16 @@ import { api } from "@/convex/_generated/api";
 import { ReviewCenterClient } from "./ReviewCenterClient";
 
 export default async function ReviewPage() {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) redirect("/sign-in");
 
+  const token = await getToken({ template: "convex" }).catch(() => null);
   let queuePreloaded: Preloaded<typeof api.reviewCenter.getReviewQueue> | null =
     null;
   let isConvexConfigured = true;
 
   try {
-    queuePreloaded = await preloadQuery(api.reviewCenter.getReviewQueue, {});
+    queuePreloaded = await preloadQuery(api.reviewCenter.getReviewQueue, {}, token ? { token } : {});
   } catch {
     isConvexConfigured = false;
   }
