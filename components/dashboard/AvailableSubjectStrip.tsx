@@ -129,7 +129,7 @@ function SubjectChip({
           disabled={pending}
           aria-label={`Add ${subject.title}`}
           className={cn(
-            "inline-flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-[11.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            "inline-flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-[11.5px] font-medium text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
           )}
         >
           <Plus className="h-3 w-3" weight="bold" />

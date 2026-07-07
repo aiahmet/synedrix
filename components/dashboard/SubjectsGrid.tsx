@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { SubjectCard } from "./SubjectCard";
 import { CockpitCard, CockpitCardHeader } from "./CockpitCard";
+import { SubjectsSearch } from "./SubjectsSearch";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils/cn";
 
@@ -16,6 +17,22 @@ import { cn } from "@/lib/utils/cn";
  * pre-resolved from the server-preloaded query, so this
  * component never needs to re-fetch.
  *
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **Single active treatment.** Both the filter chips and
+ *     the sort chips use the same `bg-accent text-accent-foreground`
+ *     "active = louder" treatment. Inconsistent active states
+ *     inside one control bar reads as accidental, not
+ *     deliberate (§4.2: "One accent per page").
+ *
+ *   - **No pill chip with count badge.** The count is inline in
+ *     the label, so the chip is one flat element instead of a
+ *     chip-inside-a-chip.
+ *
+ *   - **No bouncy CTAs.**
+ *
+ *   - **No carded list rows in the empty state.**
+ *
  * Sort + filter interaction: the Convex `list` query returns
  * the backend default order (enrolled-first by enrollment time
  * desc, then alpha). The "Recent" sort dropdown option
@@ -23,11 +40,6 @@ import { cn } from "@/lib/utils/cn";
  * subjects by mastery desc, available subjects by alpha.
  * "Name" sorts all alpha. The sort dropdown only re-orders
  * the visible array; it does not refetch.
- *
- * The catalog is NOT gated on the Convex `users` row existing —
- * see `SubjectsClient.tsx` for why. A signed-in user always
- * sees the full curriculum, with `enrolled: false` annotations
- * until their first enroll click lazy-creates the row.
  */
 export function SubjectsGrid({
   subjects,
@@ -36,12 +48,6 @@ export function SubjectsGrid({
     readonly id: Id<"subjects">;
     readonly slug: string;
     readonly title: string;
-    // `description` mirrors the canonical `subjects.list` query:
-    // `v.optional(v.string())` → `string | undefined`. Missing
-    // stays missing; present stays present. The SubjectCard
-    // body either shows a short blurb from the slug-based
-    // `subjectShortBlurb()` lookup or falls through to
-    // `subject.description`, so a missing field is fine.
     readonly description?: string;
     readonly color?: string;
     readonly icon?: string;
@@ -62,12 +68,25 @@ export function SubjectsGrid({
 }) {
   const [filter, setFilter] = useState<"all" | "enrolled" | "available">("all");
   const [sort, setSort] = useState<"recent" | "mastery" | "name">("recent");
+  const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
-    if (filter === "enrolled") return subjects.filter((s) => s.enrolled);
-    if (filter === "available") return subjects.filter((s) => !s.enrolled);
-    return subjects;
-  }, [filter, subjects]);
+    const q = query.trim().toLowerCase();
+    let arr: typeof subjects;
+    if (filter === "enrolled") arr = subjects.filter((s) => s.enrolled);
+    else if (filter === "available") arr = subjects.filter((s) => !s.enrolled);
+    else arr = subjects;
+    if (q.length > 0) {
+      arr = arr.filter((s) => {
+        return (
+          s.title.toLowerCase().includes(q) ||
+          s.slug.toLowerCase().includes(q) ||
+          (s.description?.toLowerCase().includes(q) ?? false)
+        );
+      });
+    }
+    return arr;
+  }, [filter, query, subjects]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -75,11 +94,6 @@ export function SubjectsGrid({
       arr.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sort === "mastery") {
       arr.sort((a, b) => {
-        // Enrolled subjects sort by mastery desc; available
-        // subjects sort alpha. The split keeps the "what
-        // am I strongest in" question trivial to answer
-        // while still respecting the enrolled/available
-        // partition.
         if (a.enrolled && !b.enrolled) return -1;
         if (!a.enrolled && b.enrolled) return 1;
         if (a.enrolled && b.enrolled) {
@@ -88,8 +102,6 @@ export function SubjectsGrid({
         return a.title.localeCompare(b.title);
       });
     }
-    // "recent" is the backend default order. No client-side
-    // resort needed; the order is preserved as-is.
     return arr;
   }, [filtered, sort]);
 
@@ -103,11 +115,12 @@ export function SubjectsGrid({
           label="Filter &amp; sort"
           trailing={
             <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
-              {subjects.length} subjects &middot; {enrolledCount} enrolled
+              {subjects.length} subjects · {enrolledCount} enrolled
             </span>
           }
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SubjectsSearch value={query} onChange={setQuery} />
           <div className="flex flex-wrap gap-2">
             <FilterChip
               active={filter === "all"}
@@ -131,7 +144,7 @@ export function SubjectsGrid({
           <div
             role="radiogroup"
             aria-label="Sort subjects"
-            className="inline-flex h-8 shrink-0 items-center rounded-full border border-border bg-surface-elevated p-0.5"
+            className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-border bg-background p-0.5"
           >
             <SortChip
               active={sort === "recent"}
@@ -154,18 +167,7 @@ export function SubjectsGrid({
 
       {sorted.length === 0 ? (
         <CockpitCard>
-          {/*
-            Three distinct empty states:
-
-            1. `filter === "enrolled"` + nothing — the user has
-               no enrollments yet. Invite them to pick one.
-            2. `filter === "available"` + nothing — they are
-               enrolled in every subject. Celebrate it.
-            3. `filter === "all"` + nothing — the curriculum
-               table is genuinely empty (no `subjects` rows in
-               Convex). Tell the user honestly.
-          */}
-          <div className="flex flex-col items-center gap-2 py-8 text-center">
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
             <p className="text-[13.5px] font-medium text-foreground">
               {filter === "enrolled"
                 ? "You haven't enrolled in any subjects yet."
@@ -197,8 +199,7 @@ export function SubjectsGrid({
  * One cell of the sort segmented control. Radiogroup
  * semantics so screen readers read it as a single choice
  * with a current selection. The active state uses the
- * accent surface (same family as the Filter chips) so the
- * two controls read as the same component family.
+ * accent surface; inactive stays muted. No pill chip.
  */
 function SortChip({
   active,
@@ -216,10 +217,10 @@ function SortChip({
       aria-checked={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 items-center justify-center rounded-full px-3 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex h-7 items-center justify-center rounded-sm px-3 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40",
         active
-          ? "bg-accent-subtle/60 text-accent"
-          : "text-muted-foreground hover:text-foreground"
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
       {label}
@@ -227,6 +228,14 @@ function SortChip({
   );
 }
 
+/**
+ * FilterChip.
+ *
+ * One filter chip. Plain border, no inner count pill. Active
+ * state matches the SortChip exactly: `bg-accent text-accent-foreground`.
+ * Two different "active" treatments in the same toolbar
+ * would be a visual hierarchy bug.
+ */
 function FilterChip({
   active,
   onClick,
@@ -244,19 +253,14 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-8 items-center gap-2 rounded-full border px-3.5 text-[12px] font-medium transition-colors",
+        "inline-flex h-8 items-center gap-2 rounded-md border px-3 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40",
         active
-          ? "border-accent-border/60 bg-accent-subtle/60 text-accent"
-          : "border-border bg-surface-elevated text-muted-foreground hover:border-border hover:text-foreground"
+          ? "border-accent bg-accent text-accent-foreground"
+          : "border-border bg-background text-muted-foreground hover:border-border-strong hover:text-foreground",
       )}
     >
       {label}
-      <span
-        className={cn(
-          "rounded-full px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
-          active ? "bg-accent/15" : "bg-surface"
-        )}
-      >
+      <span className="font-mono text-[10.5px] tabular-nums opacity-80">
         {count}
       </span>
     </button>
