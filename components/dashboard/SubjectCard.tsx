@@ -8,13 +8,14 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { CockpitCard } from "./CockpitCard";
+import { MasteryRing } from "./MasteryRing";
 import {
   ArrowRight,
   CalendarBlank,
   Check,
   Plus,
-  SubjectGlyph,
   Stack,
+  SubjectGlyph,
 } from "@/components/landing/icons";
 import { cn } from "@/lib/utils/cn";
 import { resolveColorVar } from "@/lib/utils/subjectColor";
@@ -24,25 +25,39 @@ import { formatRelativeDate } from "@/lib/format/relativeDate";
 /**
  * Subject card with enroll/leave + per-card progress.
  *
- * Server-renderable shape, but the action buttons are client
- * (they need to call Convex mutations). The card itself is
- * composed of three regions: a static information block
- * (top), a meta strip (middle, with last-studied + topics
- * progress), and a client action region (bottom, with the
- * context-aware CTA). A 3px-tall progress strip at the very
- * bottom of the card visualizes the user's mastery against
- * the subject's hue.
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
  *
- * The mutation is wired via `useMutation`, which is the
- * standard Convex pattern. Because the subjects query is
- * shared between the page and the mutation's optimistic
- * update, the card updates instantly on click without a
- * manual refetch.
+ *   - **Single-layer card.** The previous version was a
+ *     double-bezel (`rounded-2xl` outer + `rounded-xl` inner)
+ *     which the rulebook lists as the triple-nested anti-pattern.
+ *     `CockpitCard` is now single-layer.
  *
- * The card's `subject` shape is the canonical SubjectList
- * row returned by `api.subjects.list` (extended in the
- * SUBJECT-IMPROVEMENT-PLAN to include mastery, topicsStudied,
- * lastStudiedAt, firstTopic).
+ *   - **No icon container.** The subject glyph renders at native
+ *     size in the per-subject hue. The previous
+ *     `bg-color-mix(fillVar, 12%) border-color-mix(fillVar, 28%)`
+ *     container is removed; the rulebook §8 says "Never wrap an
+ *     icon in `bg-accent/10 ring-1 ring-accent/10`." We use
+ *     the existing `SubjectGlyph` component (which already
+ *     applies the per-subject color via `style`) and skip any
+ *     wrapper markup.
+ *
+ *   - **No pill chip.** The "Enrolled" badge is replaced with
+ *     plain uppercase muted text. Pill/track eyebrow chips are
+ *     banned (§1).
+ *
+ *   - **No bouncy CTA.** Buttons don't bounce. `active:scale-[0.98]`
+ *     is removed (§1, §6).
+ *
+ *   - **`hover:bg-accent/90`** not `hover:opacity-90` (§6).
+ *
+ * The card composes four regions: subject identity (icon + title
+ * + blurb), mastery strip (ring + percent for enrolled cards),
+ * meta strip (chapter count, topic progress, last-studied), and
+ * the context-aware CTA. The 2px mastery bar at the bottom
+ * (per-subject hue) survives the refactor — it is the only place
+ * the per-subject color appears in the card body, and the rulebook
+ * allows one categorical color (the per-subject hue is one of
+ * the six, used sparingly).
  */
 export function SubjectCard({
   subject,
@@ -51,10 +66,6 @@ export function SubjectCard({
     readonly id: Id<"subjects">;
     readonly slug: string;
     readonly title: string;
-    // Mirrors the canonical `subjects.list` query: `v.optional(v.string())`
-    // → `string | undefined`. The card body falls through to
-    // `subjectShortBlurb(slug)` first, so a missing description
-    // is fine — the card simply renders no blurb line.
     readonly description?: string;
     readonly color?: string;
     readonly icon?: string;
@@ -76,12 +87,6 @@ export function SubjectCard({
   const fillVar = resolveColorVar(subject.color);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  // The empty-state dashboard CTA sets `?intent=start`. When
-  // that flag is set, enrolling is the last step of an
-  // onboarding flow — the user wanted to start studying, not
-  // browse the catalog. We auto-navigate into the subject
-  // detail page on success so they do not have to click the
-  // freshly-enabled "Open" button.
   const searchParams = useSearchParams();
   const autoOpenOnEnroll = searchParams.get("intent") === "start";
   const enroll = useMutation(api.subjects.enroll);
@@ -102,17 +107,6 @@ export function SubjectCard({
     });
   };
 
-  // CTA + href logic. The plan calls for a context-aware
-  // primary action so the card always points at the next
-  // thing to do:
-  //
-  //   - Enrolled + has progress   -> "Continue" -> first topic
-  //   - Enrolled + zero progress  -> "Start first topic" -> first topic
-  //   - Not enrolled              -> "Add subject" (enroll inline)
-  //
-  // When the subject has no topics yet, "Add subject" stays
-  // the only available action. The Leave button only shows
-  // in the enrolled branch.
   const hasFirstTopic = subject.firstTopic !== null;
   const continueHref = hasFirstTopic
     ? `/subjects/${subject.slug}/${subject.firstTopic!.chapterSlug}/${subject.firstTopic!.slug}`
@@ -124,35 +118,32 @@ export function SubjectCard({
         ? "Start first topic"
         : null;
   const masteryPct = Math.round(subject.mastery * 100);
-  // The short blurb is the chip/strip-level description
-  // (≤ 80 chars). It is preferred over the long
-  // `description` for the card body because the card
-  // has a 2-line clamp. Falls back to the long
-  // description if the slug has no entry in
-  // SUBJECT_SHORT_BLURBS yet.
   const chipLine = subjectShortBlurb(subject.slug) ?? subject.description;
 
   return (
-    <CockpitCard className="relative flex h-full flex-col overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] active:translate-y-0 active:shadow-[var(--shadow-soft)] motion-reduce:hover:translate-y-0 motion-reduce:hover:shadow-[var(--shadow-soft)]">
+    <CockpitCard
+      className={cn(
+        "relative flex h-full flex-col overflow-hidden",
+        "transition-shadow duration-300 hover:shadow-[0_1px_3px_rgba(0,0,0,0.04),0_14px_40px_-12px_rgba(0,0,0,0.10)]",
+      )}
+    >
       <div className="flex items-start gap-3">
-        <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
-          style={{
-            backgroundColor: `color-mix(in srgb, ${fillVar} 12%, transparent)`,
-            borderColor: `color-mix(in srgb, ${fillVar} 28%, transparent)`,
-          }}
-          aria-hidden
-        >
-          <SubjectGlyph icon={subject.icon} className="h-[1.15rem] w-[1.15rem]" fillVar={fillVar} />
-        </span>
+        {/* Subject glyph at native size via the shared
+            `SubjectGlyph` component. No container. The
+            component applies the per-subject hue internally. */}
+        <SubjectGlyph
+          icon={subject.icon}
+          className="mt-0.5 h-5 w-5 shrink-0"
+          fillVar={fillVar}
+        />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate text-[14.5px] font-semibold tracking-tight text-foreground">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-[15px] font-semibold tracking-tight text-foreground">
               {subject.title}
             </h3>
             {subject.enrolled && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-border/50 bg-accent-subtle/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-accent">
-                <Check className="h-2.5 w-2.5" weight="bold" />
+              <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-accent">
+                <Check className="h-3 w-3" weight="bold" />
                 Enrolled
               </span>
             )}
@@ -164,6 +155,27 @@ export function SubjectCard({
           )}
         </div>
       </div>
+
+      {subject.enrolled && subject.topicCount > 0 && (
+        <div className="mt-5 flex items-center gap-3">
+          <MasteryRing
+            value={subject.mastery}
+            size={44}
+            strokeWidth={4}
+            label={`${masteryPct}%`}
+            ariaLabel={`Subject mastery ${masteryPct} percent`}
+            colorVar={fillVar}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+              Mastery
+            </p>
+            <p className="text-[12.5px] font-medium tracking-tight text-foreground">
+              {masteryPct}% across {subject.topicsStudied} of {subject.topicCount} topics
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11.5px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
@@ -194,7 +206,7 @@ export function SubjectCard({
             {hasFirstTopic ? (
               <Link
                 href={continueHref}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3.5 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
               >
                 {continueLabel}
                 <ArrowRight className="h-3.5 w-3.5" weight="bold" />
@@ -202,7 +214,7 @@ export function SubjectCard({
             ) : (
               <Link
                 href={continueHref}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3.5 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
               >
                 Open
                 <ArrowRight className="h-3.5 w-3.5" weight="bold" />
@@ -212,9 +224,7 @@ export function SubjectCard({
               type="button"
               onClick={onLeave}
               disabled={pending}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface-elevated px-3 text-[12.5px] font-medium text-muted-foreground transition-all hover:border-subject-french/40 hover:text-subject-french disabled:cursor-not-allowed disabled:opacity-60"
-              )}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-subject-french/40 hover:text-subject-french disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Leaving..." : "Leave"}
             </button>
@@ -228,9 +238,7 @@ export function SubjectCard({
               type="button"
               onClick={onEnroll}
               disabled={pending}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-              )}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-3.5 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="h-3.5 w-3.5" weight="bold" />
               {pending ? "Adding..." : "Add subject"}
@@ -239,20 +247,16 @@ export function SubjectCard({
         )}
       </div>
 
-      {/* 3px-tall mastery strip at the very bottom of the
-          card. Filled with the subject's hue (not the
-          global accent) so a glance at the grid reveals
-          which subject is the strongest at a glance.
-          Rendered ONLY for enrolled cards. A non-enrolled
-          card has no mastery to surface, and a 0% sliver
-          reads as "you have made progress" — which would
-          be wrong. The card is wrapped in `relative
-          overflow-hidden` (CockpitCard) so the strip
-          never escapes the rounded corners. */}
-      {subject.enrolled && (
+      {/* The per-subject mastery strip at the bottom of the card.
+          This is the only place the per-subject color is used in
+          the card body. Renders a 2px-tall fill so a glance at
+          the catalog grid reveals which subject is the strongest.
+          The strip respects the `overflow-hidden` on the card so
+          it never escapes the rounded corners. */}
+      {subject.enrolled && subject.topicCount > 0 && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-border/30"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-border/40"
         >
           <div
             className="h-full transition-[width] duration-700 ease-out"

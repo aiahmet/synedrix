@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { currentUser } from "@clerk/nextjs/server";
-import { preloadQuery } from "convex/nextjs";
+import { fetchQuery, preloadQuery } from "convex/nextjs";
 import { Preloaded } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
@@ -53,21 +53,56 @@ export default async function DashboardPage() {
 
   let preloaded: Preloaded<typeof api.dashboard.getOverview> | null = null;
   let subjectsPreloaded: Preloaded<typeof api.subjects.list> | null = null;
+  let continuePreloaded: Preloaded<
+    typeof api.dashboard.getContinueStudying
+  > | null = null;
+  let recentActivityPreloaded: Preloaded<
+    typeof api.dashboard.getRecentActivity
+  > | null = null;
+  let whatsNewPreloaded: Preloaded<
+    typeof api.telemetry.getRecentSystemUpdates
+  > | null = null;
+  let ownedTopicsPreloaded: Preloaded<
+    typeof api.dashboard.listOwnedTopicsForCurrentUser
+  > | null = null;
   let isConvexConfigured = true;
 
   try {
-    // Two independent reads: the cockpit payload (per-user)
-    // and the canonical subject list (so the empty cockpit
-    // can render the inline one-click picker). Both run in
-    // parallel below.
-    [preloaded, subjectsPreloaded] = await Promise.all([
-      preloadQuery(api.dashboard.getOverview, {}),
-      preloadQuery(api.subjects.list, {}),
-    ]);
+    const dashboardTimeZone =
+      typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "UTC";
+    try {
+      [preloaded, subjectsPreloaded] = await Promise.all([
+        preloadQuery(api.dashboard.getOverview, { timeZone: dashboardTimeZone }),
+        preloadQuery(api.subjects.list, {}),
+      ]);
+    } catch {
+      isConvexConfigured = false;
+    }
+    if (preloaded !== null && subjectsPreloaded !== null) {
+      try {
+        const overview = await fetchQuery(api.dashboard.getOverview, {
+          timeZone: dashboardTimeZone,
+        });
+        if (!overview.isEmpty) {
+          [
+            continuePreloaded,
+            recentActivityPreloaded,
+            whatsNewPreloaded,
+            ownedTopicsPreloaded,
+          ] = await Promise.all([
+            preloadQuery(api.dashboard.getContinueStudying, {}),
+            preloadQuery(api.dashboard.getRecentActivity, { limit: 5 }),
+            preloadQuery(api.telemetry.getRecentSystemUpdates, { limit: 3 }),
+            preloadQuery(api.dashboard.listOwnedTopicsForCurrentUser, {}),
+          ]);
+        }
+      } catch {
+        isConvexConfigured = false;
+      }
+    }
   } catch {
-    // If the Convex deployment is not reachable (e.g. missing env
-    // in local dev), fall through to the empty state so the page
-    // still renders instead of crashing the route.
     isConvexConfigured = false;
   }
 
@@ -87,10 +122,19 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      {preloaded && subjectsPreloaded ? (
+      {preloaded &&
+      subjectsPreloaded &&
+      continuePreloaded &&
+      recentActivityPreloaded &&
+      whatsNewPreloaded &&
+      ownedTopicsPreloaded ? (
         <DashboardOverviewClient
           preloaded={preloaded}
           subjectsPreloaded={subjectsPreloaded}
+          continuePreloaded={continuePreloaded}
+          recentActivityPreloaded={recentActivityPreloaded}
+          whatsNewPreloaded={whatsNewPreloaded}
+          ownedTopicsPreloaded={ownedTopicsPreloaded}
           fallbackName={firstName}
         />
       ) : (

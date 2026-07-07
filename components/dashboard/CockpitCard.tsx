@@ -3,14 +3,16 @@ import { cn } from "@/lib/utils/cn";
 /**
  * CockpitCard.
  *
- * Shared surface primitive for the dashboard cockpit. Mirrors the
- * double-bezel language of the auth `AuthFormCard` (rounded-2xl
- * outer, rounded-xl inner, border + soft surface, subtle accent
- * ring on hover/active surfaces) so the user perceives a single
- * design system across sign-in, sign-up, and the app shell.
+ * Single-layer surface primitive for the dashboard cockpit. Per
+ * `docs/SYNEDRIX-FRONTEND-STYLE.md` §5, we use ONE layer
+ * (`rounded-xl border bg-background` with a layered shadow) and
+ * stop. The previous double-bezel ("rounded-2xl bg-surface-elevated
+ * p-1.5" outer + "rounded-xl bg-background" inner) is the
+ * triple-nested-card anti-pattern the rulebook bans; the
+ * `bg-surface-elevated` ring read as halo chrome.
  *
- * The card is intentionally a Server Component. It does not own
- * state and does not need to cross the client boundary.
+ * The card is a Server Component. It does not own state and does
+ * not need to cross the client boundary.
  */
 export function CockpitCard({
   children,
@@ -24,11 +26,11 @@ export function CockpitCard({
   return (
     <Tag
       className={cn(
-        "group relative rounded-2xl border border-border bg-surface-elevated p-1.5 shadow-[var(--shadow-soft)]",
+        "rounded-xl border border-border bg-background p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)] sm:p-7 dark:shadow-[0_1px_0_0_rgb(255_255_255_/_0.05),0_8px_24px_-12px_rgba(0,0,0,0.45)]",
         className
       )}
     >
-      <div className="relative rounded-xl bg-background p-5 sm:p-6">{children}</div>
+      {children}
     </Tag>
   );
 }
@@ -39,7 +41,8 @@ export function CockpitCard({
  * Small label + optional action row that sits at the top of a
  * CockpitCard. The label uses mono-uppercase tracking for the
  * same reason it does on the landing page: it reads as instrument
- * labeling, not marketing.
+ * labeling, not marketing. Plain text only (no pill chip — the
+ * rulebook §1 lists pill/track eyebrow chips as banned).
  */
 export function CockpitCardHeader({
   label,
@@ -49,8 +52,8 @@ export function CockpitCardHeader({
   readonly trailing?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-between">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+    <div className="mb-5 flex items-center justify-between">
+      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </span>
       {trailing}

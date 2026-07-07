@@ -4,7 +4,6 @@ import {
   CalendarBlank,
   CheckCircle,
   Stack,
-  Sparkle,
 } from "@/components/landing/icons";
 import { formatRelativeDate } from "@/lib/format/relativeDate";
 
@@ -12,9 +11,22 @@ import { formatRelativeDate } from "@/lib/format/relativeDate";
  * SubjectDetailStats.
  *
  * Three-up row of subject-level signals: mastery ring, topics
- * progress (studied / total), and last studied date. The layout
- * is identical to the dashboard's CockpitStatsRow so the user
- * reads the same instrument language on both pages.
+ * progress (studied / total), and last studied date. Per
+ * `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **No icon container.** The previous
+ *     `bg-accent/10 ring-1 ring-accent/10` boxes around the
+ *     `CheckCircle` and `CalendarBlank` icons are removed
+ *     (§8: "Never wrap an icon in `bg-accent/10 ring-1
+ *     ring-accent/10`. Just render it at native size and
+ *     color").
+ *
+ *   - **No bouncy CTA.** The "Continue the loop" link
+ *     (the tail of each stat cell) drops the scale
+ *     interaction and reads as quiet typography.
+ *
+ * The layout is identical to the dashboard's `CockpitStatsRow`
+ * so the user reads the same instrument language on both pages.
  */
 export function SubjectDetailStats({
   mastery,
@@ -86,12 +98,12 @@ export function SubjectDetailStats({
               {progressPct}% complete
             </p>
           </div>
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 ring-1 ring-accent/10">
-            <CheckCircle
-              className="h-[1.05rem] w-[1.05rem] text-accent"
-              weight="duotone"
-            />
-          </span>
+          {/* Icon at native size, no container. */}
+          <CheckCircle
+            className="mt-0.5 h-5 w-5 shrink-0 text-accent"
+            weight="duotone"
+            aria-hidden
+          />
         </div>
       </CockpitCard>
 
@@ -107,17 +119,17 @@ export function SubjectDetailStats({
                 ? "Most recent progress on any topic in this subject."
                 : "Start a session to set the clock."}
             </p>
-            <p className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-accent">
-              <Sparkle className="h-3 w-3" weight="duotone" />
+            <p className="mt-3 text-[12px] font-medium text-accent">
               Continue the loop
             </p>
           </div>
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 ring-1 ring-accent/10">
-            <CalendarBlank
-              className="h-[1.05rem] w-[1.05rem] text-accent"
-              weight="duotone"
-            />
-          </span>
+          {/* Icon at native size, no container. The previous
+              `bg-accent/10 ring-1 ring-accent/10` box is gone. */}
+          <CalendarBlank
+            className="mt-0.5 h-5 w-5 shrink-0 text-accent"
+            weight="duotone"
+            aria-hidden
+          />
         </div>
       </CockpitCard>
     </div>

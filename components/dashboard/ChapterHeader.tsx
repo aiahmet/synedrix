@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowLeft, Books, Stack, Timer } from "@/components/landing/icons";
+import { ArrowLeft, Stack, SubjectGlyph, Timer } from "@/components/landing/icons";
+import { resolveColorVar } from "@/lib/utils/subjectColor";
 
 /**
  * ChapterHeader.
@@ -10,9 +11,19 @@ import { ArrowLeft, Books, Stack, Timer } from "@/components/landing/icons";
  * description, and a small metadata row (topic count + total
  * estimated minutes).
  *
- * Pure server-renderable. The primary "Start a study session"
- * CTA lives in the per-topic rows in the list below so the
- * user can scope a session to a specific topic.
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
+ *
+ *   - **No icon container.** The chapter's subject glyph
+ *     renders at native size in the per-subject hue via the
+ *     shared `SubjectGlyph` component (§8).
+ *
+ *   - **No pill chips.** The "Chapter N" label is plain
+ *     uppercase muted text (§1).
+ *
+ *   - **No bouncy CTAs.** The breadcrumb is a quiet
+ *     `transition-colors` link.
+ *
+ * Pure server-renderable.
  */
 export function ChapterHeader({
   subject,
@@ -24,6 +35,7 @@ export function ChapterHeader({
     readonly slug: string;
     readonly title: string;
     readonly color?: string;
+    readonly icon?: string;
   };
   readonly chapter: {
     readonly slug: string;
@@ -44,7 +56,7 @@ export function ChapterHeader({
       >
         <Link
           href="/subjects"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-elevated/60 px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground backdrop-blur-sm transition-colors hover:border-accent-border/60 hover:text-foreground"
+          className="inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3 w-3" weight="bold" />
           All subjects
@@ -52,34 +64,28 @@ export function ChapterHeader({
         <span className="text-muted-foreground/50">/</span>
         <Link
           href={`/subjects/${subject.slug}`}
-          className="rounded-full px-2 py-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+          className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
         >
           {subject.title}
         </Link>
         <span className="text-muted-foreground/50">/</span>
-        <span className="rounded-full bg-accent-subtle/40 px-2 py-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-accent">
+        <span className="font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-foreground">
           {chapter.title}
         </span>
       </nav>
 
       <div className="flex items-start gap-4">
-        <span
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border"
-          style={{
-            backgroundColor: `color-mix(in srgb, ${fillVar} 14%, transparent)`,
-            borderColor: `color-mix(in srgb, ${fillVar} 30%, transparent)`,
-          }}
-          aria-hidden
-        >
-          <Books
-            className="h-6 w-6"
-            weight="duotone"
-            style={{ color: fillVar }}
-          />
-        </span>
+        {/* Subject glyph at native size, per-subject hue, no
+            container. The chapter is rendered without a
+            glyph of its own — the subject is the identity. */}
+        <SubjectGlyph
+          icon={subject.icon}
+          className="mt-0.5 h-7 w-7 shrink-0"
+          fillVar={fillVar}
+        />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-border bg-surface-elevated px-2 py-0.5 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
               Chapter {String(chapter.order).padStart(2, "0")}
             </span>
             <h1 className="text-balance text-[clamp(1.6rem,2.2vw+0.5rem,2rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
@@ -106,14 +112,4 @@ export function ChapterHeader({
       </div>
     </header>
   );
-}
-
-/**
- * Resolve a subject color slug to a concrete CSS variable.
- * Falls back to the global accent so the bar is always visible.
- */
-function resolveColorVar(slug: string | undefined): string {
-  if (!slug) return "var(--accent)";
-  const normalized = slug.startsWith("subject-") ? slug : `subject-${slug}`;
-  return `var(--${normalized})`;
 }

@@ -30,16 +30,20 @@ import { cn } from "@/lib/utils/cn";
  *      routed to /tutor?subject=…&topic=…&q=<encoded>, where the
  *      tutor page reads `?q=` and preloads the composer.
  *
- * The `slotId` prop is reserved for a future enhancement that
- * scopes selection capture to a specific DOM region (only quote
- * selection inside the lesson panels). Right now selection is
- * read from anywhere on the page; capturing selection is gated
- * by the API contract (a string return) so the misfeature cost
- * is bounded — accidental quotes from outside the lesson area
- * are still coherent asks.
+ * Per `docs/SYNEDRIX-FRONTEND-STYLE.md`:
  *
- * Client because it reads `window.getSelection()` and pushes a
- * route. Pure DOM API calls; not a server-renderable concern.
+ *   - **No bouncy CTA.** The "Ask" button drops
+ *     `active:scale-[0.98]`.
+ *
+ *   - **`hover:bg-foreground/90`** not `hover:opacity-90` (§6).
+ *
+ *   - **Crisp focus state.** `focus-within:border-foreground
+ *     focus-within:ring-1 focus-within:ring-foreground/40` —
+ *     contrast ≥3:1, not the airy 2px `ring-ring` glow.
+ *
+ * The `slotId` prop is reserved for a future enhancement that
+ * scopes selection capture to a specific DOM region. Client
+ * because it reads `window.getSelection()` and pushes a route.
  */
 export function AskTutorCta({
   subject,
@@ -50,10 +54,10 @@ export function AskTutorCta({
     readonly slug: string;
     readonly title: string;
   };
-  readonly topic: {
+  readonly topic?: {
     readonly slug: string;
     readonly title: string;
-  };
+  } | null;
   readonly slotId?: string;
 }) {
   const router = useRouter();
@@ -63,15 +67,9 @@ export function AskTutorCta({
   const onSubmit = () => {
     const typed = input.trim();
     let combined = typed;
-    // Capture selection only inside the lesson region if a slot
-    // id was provided; anywhere on the page otherwise. Both are
-    // bounded by the same window-selection API.
     if (typeof window !== "undefined") {
       const selection = window.getSelection()?.toString().trim() ?? "";
       if (selection.length > 0 && selection.length < 800) {
-        // Cap the quoted text so a misclick that pulls in an
-        // entire lesson paragraph doesn't blow past the URL
-        // budget. 800 chars is plenty for one or two sentences.
         const truncated =
           selection.length > 600
             ? `${selection.slice(0, 600)}…`
@@ -83,11 +81,17 @@ export function AskTutorCta({
         }
       }
     }
-    void slotId; // referenced for future DOM-scoped capture
+    void slotId;
     const params = new URLSearchParams({
       subject: subject.slug,
-      topic: topic.slug,
+      ...(topic ? { topic: topic.slug } : {}),
       ...(combined.length > 0 ? { q: combined } : {}),
+      from:
+        typeof window !== "undefined"
+          ? window.location.pathname
+          : topic
+            ? `/subjects/${topic.slug}`
+            : `/subjects/${subject.slug}`,
     });
     router.push(`/tutor?${params.toString()}`);
   };
@@ -110,15 +114,15 @@ export function AskTutorCta({
         label="Ask the tutor"
         trailing={
           <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
-            About this topic
+            {topic ? "About this topic" : "About this subject"}
           </span>
         }
       />
       <div className="flex flex-col gap-2">
         <div
           className={cn(
-            "flex items-center gap-2 rounded-lg border bg-background px-3 py-2 transition-colors",
-            "border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring"
+            "flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 transition-colors",
+            "focus-within:border-foreground focus-within:ring-1 focus-within:ring-foreground/40",
           )}
         >
           <ChatCircleText
@@ -135,17 +139,25 @@ export function AskTutorCta({
                 onSubmit();
               }
             }}
-            placeholder="Ask a question — selection is quoted automatically"
+            placeholder={
+              topic
+                ? "Ask a question — selection is quoted automatically"
+                : "Ask about any topic in this subject"
+            }
             className="min-w-0 flex-1 bg-transparent text-[12.5px] leading-snug text-foreground placeholder:text-muted-foreground focus:outline-none"
-            aria-label="Ask the tutor a question about this topic"
+            aria-label={
+              topic
+                ? "Ask the tutor a question about this topic"
+                : "Ask the tutor a question about this subject"
+            }
           />
           <button
             type="button"
             onClick={onSubmit}
             disabled={!canSubmit}
             className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2.5 text-[11.5px] font-medium transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50",
-              "bg-foreground text-background hover:opacity-90"
+              "inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2.5 text-[11.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              "bg-foreground text-background hover:bg-foreground/90",
             )}
           >
             <Plus className="h-3 w-3" weight="bold" />

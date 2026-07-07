@@ -18,6 +18,7 @@ export function MasteryRing({
   className,
   label,
   ariaLabel,
+  colorVar = "var(--accent)",
 }: {
   readonly value: number;
   readonly size?: number;
@@ -25,6 +26,13 @@ export function MasteryRing({
   readonly className?: string;
   readonly label: string;
   readonly ariaLabel: string;
+  /**
+   * CSS color value for the value arc. Defaults to
+   * the global accent. Pass a `var(--subject-*)` to
+   * bind the ring to a per-subject hue (used on
+   * `SubjectCard` and the chapter-path nodes).
+   */
+  readonly colorVar?: string;
 }) {
   const clamped = Math.max(0, Math.min(1, value));
   const radius = (size - strokeWidth) / 2;
@@ -58,7 +66,7 @@ export function MasteryRing({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="var(--accent)"
+          stroke={colorVar}
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
