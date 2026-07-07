@@ -1,51 +1,5 @@
 "use client";
-
-/**
- * tutorWidgets.tsx.
- *
- * The block parser + widget registry for the AI tutor.
- * The chat surface lets the model emit terse markers
- * (`[[kind:data]]`) inline with prose, this file
- *
- *  1. Parses each marker into a typed payload
- *     (`parseBlockMarker`).
- *  2. Routes the payload to a focused widget
- *     component (`BlockWidget`).
- *  3. Handles the streaming edge case where a chunk
- *     starts `[[steps:...` but has not yet closed —
- *     the parser returns `{ complete: false }` and the
- *     dispatcher renders a small `<Pulse />` skeleton
- *     so the user doesn't see raw `[[...` on their
- *     screen while the model thinks.
- *
- * All widgets are rendered from Div-only Tailwind
- * primitives (no SVG, no third-party charting libs)
- * per the architecture set in the thinker's review.
- * The diagrams (tree, numberline, barchart, function
- * graph) are responsive by construction (flex columns
- * with proportional widths) so they look at home on
- * mobile through 4K.
- *
- * Block marker contract (the chat prompt teaches this):
- *
- *   [[topic:slug|Title]]
- *   [[formula:Quadratic|x^2 + bx + c = 0|When solving for roots]]
- *   [[mistake:CALCULATION_MISTAKE|Forgot to flip the sign]]
- *   [[concept:Logarithm]]
- *   [[steps:Step 1: do X|Step 2: do Y|Step 3: do Z]]
- *   [[choice:Which rule applies?|A) Product Rule|B) Quotient Rule|C) Power Rule|Correct=B]]
- *   [[diagram:tree|a->b->c,a->d]]
- *   [[diagram:numberline|min:0|max:10|highlight:4]]
- *   [[diagram:barchart|labels:A,B,C|values:5,3,2]]
- *   [[diagram:graph|y=x^2|xmin:-2|xmax:2]]
- *
- * The model never emits anything that doesn't fit one
- * of these shapes. Failed parses fall back to a styled
- * raw-text block so the user always reads something
- * coherent even on a malformed marker.
- */
-
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   CheckCircle,
@@ -60,15 +14,33 @@ import {
   Warning,
 } from "@phosphor-icons/react/dist/ssr";
 
+import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
+import dynamic from "next/dynamic";
+import { isLanguageTerm } from "@/components/tutor/widgets/vocabularyUtils";
+import { parseFormula } from "@/components/tutor/widgets/MoleculeDiagram";
 
-/**
- * Discriminated union for every marker kind the model
- * can emit. `complete: false` is the streaming edge —
- * the closing `]]` has not landed yet. The dispatcher
- * renders a skeleton in that case; the actual widget
- * only swaps in once `complete: true`.
- */
+
+const GraphPlotter = dynamic(
+  async () => (await import("@/components/tutor/widgets/GraphPlotter")).GraphPlotter,
+  { ssr: false }
+);
+
+const VocabularyCard = dynamic(
+  async () => (await import("@/components/tutor/widgets/VocabularyCard")).VocabularyCard,
+  { ssr: false }
+);
+
+const CodeBlock = dynamic(
+  async () => (await import("@/components/tutor/widgets/CodeBlock")).CodeBlock,
+  { ssr: false }
+);
+
+const MoleculeDiagram = dynamic(
+  async () => (await import("@/components/tutor/widgets/MoleculeDiagram")).MoleculeDiagram,
+  { ssr: false }
+);
+
 export type BlockMarker =
   | { kind: "topic"; slug: string; title: string; complete: true }
   | { kind: "formula"; name: string; expression: string; when: string; complete: true }
@@ -83,22 +55,16 @@ export type BlockMarker =
       complete: true;
     }
   | { kind: "diagram"; subkind: DiagramKind; spec: DiagramSpec; complete: true }
+  | {
+      kind: "code";
+      language: string;
+      code: string;
+      complete: true;
+    }
   | { kind: "incomplete"; raw: string };
 
-/**
- * Diagram kinds. Each maps to a focused component
- * below. Adding a new diagram = adding a kind + a
- * parser branch + a component, all colocated so a
- * future reader sees the whole shape in one file.
- */
-export type DiagramKind = "tree" | "numberline" | "barchart" | "graph";
+export type DiagramKind = "tree" | "numberline" | "barchart" | "graph" | "molecule";
 
-/**
- * The parsed shape of `[[diagram:kind|spec-string]]`.
- * One discriminated union so the per-kind renderers
- * receive cleanly-typed props without further
- * narrowing.
- */
 export type DiagramSpec =
   | { kind: "tree"; edges: ReadonlyArray<readonly [string, string]> }
   | {
@@ -114,64 +80,26 @@ export type DiagramSpec =
     }
   | {
       kind: "graph";
-      // One of: a built-in curve name (e.g. "x^2") for
-      // the simple polynomials the MVP supports; or a
-      // free-form "x" expression we render verbatim into
-      // a printable diagram caption. We do NOT plot
-      // graphs at runtime — that's a much heavier lift
-      // — instead we render an editable caption + a
-      // small "rough sketch" indicator.
       formula: string;
       xmin: number;
       xmax: number;
+    }
+  | {
+      kind: "molecule";
+      formula: string;
     };
 
-/**
- * OPENING + CLOSING tokens. Hard-coded here (not in
- * chat prompt) so the model + parser + dispatcher
- * agree on the contract by construction.
- */
 const OPEN = "[[";
 const CLOSE = "]]";
 
-/**
- * parseBlockMarker.
- *
- * Parses a single text block (typically the raw
- * `token.raw` of one marked block) into a typed
- * widget payload.
- *
- * Returns `null` if the block is not a marker — the
- * caller (aiMarkdown) then passes the block through
- * react-markdown as before.
- *
- * Returns `{ kind: "incomplete" }` when the marker
- * opens with `[[kind:` but the closing `]]` has not
- * landed yet. The dispatcher renders a `<Pulse />`
- * skeleton so the user sees the widget shaping up
- * without seeing the raw `[[...` text.
- *
- * The regexes are PER-KIND because the data shape
- * differs wildly between marker kinds and we want
- * the parser to be deterministic about each. Building
- * one big regex with capture groups per kind would
- * be brittle and force the dispatcher to reparse.
- */
 export function parseBlockMarker(raw: string): BlockMarker | null {
-  // Strip leading/trailing whitespace. A `[[...]]`
-  // marker is supposed to be its own paragraph so we
-  // trim before checking; any non-empty marker is the
-  // entire block.
   const trimmed = raw.trim();
   if (!trimmed.startsWith(OPEN)) return null;
 
-  // Streaming edge: the close has not landed.
   if (!trimmed.endsWith(CLOSE)) {
     return { kind: "incomplete", raw: trimmed };
   }
 
-  // Strip the [[ and ]] and slice on the first ":" so
-  // we get `kind` + `payloadString`.
   const inner = trimmed.slice(OPEN.length, trimmed.length - CLOSE.length);
   const colonIdx = inner.indexOf(":");
   if (colonIdx <= 0) return { kind: "incomplete", raw: trimmed };
@@ -180,8 +108,6 @@ export function parseBlockMarker(raw: string): BlockMarker | null {
 
   switch (kind) {
     case "topic": {
-      // Format: `slug|Title` — pipe-separation; the
-      // slug is alphanumeric + dashes.
       const parts = splitPipes(payload, 2);
       if (parts.length !== 2) return null;
       const [slug, title] = parts;
@@ -189,7 +115,6 @@ export function parseBlockMarker(raw: string): BlockMarker | null {
       return { kind: "topic", slug, title, complete: true };
     }
     case "formula": {
-      // Format: `name|expression|when`.
       const parts = splitPipes(payload, 3);
       if (parts.length !== 3) return null;
       const [name, expression, when] = parts;
@@ -240,6 +165,18 @@ export function parseBlockMarker(raw: string): BlockMarker | null {
       const parts = splitPipes(payload, 2);
       if (parts.length !== 2) return null;
       return parseDiagramMarker(parts[0] ?? "", parts[1] ?? "");
+    }
+    case "code": {
+      // Phase 5 §7.3 — [[code:lang|code-body]]
+      // Format: `language|code`. Language is a short
+      // identifier (python, js, html, etc.). Code is
+      // the rest of the payload (may contain pipes).
+      const parts = splitPipes(payload, 2);
+      if (parts.length !== 2) return null;
+      const language = (parts[0] ?? "").trim();
+      const code = (parts[1] ?? "").trim();
+      if (!language || !code) return null;
+      return { kind: "code", language, code, complete: true };
     }
     default:
       // Unknown marker — surface as raw so the user
@@ -307,6 +244,8 @@ function parseDiagramMarker(kindRaw: string, specRaw: string): BlockMarker | nul
       return parseBarchartDiagram(specRaw);
     case "graph":
       return parseGraphDiagram(specRaw);
+    case "molecule":
+      return parseMoleculeDiagram(specRaw);
     default:
       return null;
   }
@@ -395,11 +334,11 @@ function parseBarchartDiagram(specRaw: string): { kind: "diagram"; subkind: Diag
 }
 
 /**
- * Graph spec: `formula:y=x^2|xmin:-2|xmax:2`. We do
- * NOT plot at runtime; we surface the formula + range
- * in a composed card with a "rough sketch" indicator
- * (so the user knows what to expect without a heavy
- * charting library).
+ * Graph spec: `formula:y=x^2|xmin:-2|xmax:2`.
+ * Phase 5 §7.1: rendered by the interactive
+ * GraphPlotter canvas widget (zoom, pan, roots,
+ * extrema). The previous placeholder card is
+ * replaced.
  */
 function parseGraphDiagram(specRaw: string): { kind: "diagram"; subkind: DiagramKind; spec: DiagramSpec; complete: true } | null {
   const map = readKeyValues(specRaw);
@@ -413,6 +352,26 @@ function parseGraphDiagram(specRaw: string): { kind: "diagram"; subkind: Diagram
     kind: "diagram",
     subkind: "graph",
     spec: { kind: "graph", formula, xmin, xmax },
+    complete: true,
+  };
+}
+
+/**
+ * Molecule spec: plain chemical formula like `H2O`.
+ * Phase 5 §7.4: rendered as an SVG ball-and-stick
+ * diagram.
+ */
+function parseMoleculeDiagram(specRaw: string): { kind: "diagram"; subkind: DiagramKind; spec: DiagramSpec; complete: true } | null {
+  const formula = specRaw.trim();
+  if (!formula) return null;
+  // Validate formula syntax at parse time so invalid
+  // markers are rejected early (the DiagramBlock
+  // never renders a broken molecule).
+  if (parseFormula(formula) === null) return null;
+  return {
+    kind: "diagram",
+    subkind: "molecule",
+    spec: { kind: "molecule", formula },
     complete: true,
   };
 }
@@ -449,12 +408,24 @@ function readKeyValues(raw: string): Record<string, string> | null {
  * the parser) render a quiet skeleton with a Pulse
  * chip so the user sees the widget shaping up — much
  * cleaner than letting them see raw `[[steps:...`.
+ *
+ * Phase 4 §6.1 — choice-click engagement signal:
+ * `streaming` and `onChoicePicked` are threaded down
+ * to `ChoiceMenu` so the widget can compute
+ * `responseTimeMs` from the moment it became
+ * interactable (streaming flipped false) to the
+ * user's click. The signal flows up to `MessageList`
+ * → `TutorClient` → Convex strategy state, where the
+ * route handler decides whether to inject a
+ * passive-dismissal nudge block on the next prompt
+ * build.
  */
 export function BlockWidget({
   marker,
   className,
   streaming,
   onAskQuestion,
+  onChoicePicked,
 }: {
   readonly marker: BlockMarker;
   readonly className?: string;
@@ -463,9 +434,14 @@ export function BlockWidget({
    * streaming this message. Threaded down to
    * `StepReveal` so it auto-emerges progressively
    * instead of waiting for the user's manual
-   * reveal CTA. Defaults to `false` (the user-
-   * controlled pattern, which is correct for
-   * any widget rendered outside a live stream).
+   * reveal CTA. Threaded down to `ChoiceMenu` so
+   * it can compute the choice-click response time
+   * from "settled" rather than "first mounted"
+   * (the streaming seconds themselves should NOT
+   * count as readable time). Defaults to `false`
+   * (the user-controlled pattern, which is
+   * correct for any widget rendered outside a
+   * live stream).
    */
   readonly streaming?: boolean;
   /**
@@ -475,6 +451,19 @@ export function BlockWidget({
    * message into the chat.
    */
   readonly onAskQuestion?: (text: string) => void;
+  /**
+   * Phase 4 §6.1: callback fired when the user
+   * clicks a `[[choice:...]]` option. Carries
+   * `responseTimeMs` (time from when the widget
+   * became interactable to the click) and the picked
+   * label so the parent can persist the signal to
+   * the strategy state. Render paths that don't
+   * surface choice widgets can omit this prop.
+   */
+  readonly onChoicePicked?: (signal: {
+    readonly responseTimeMs: number;
+    readonly pickedCorrect: boolean;
+  }) => void;
 }) {
   if (marker.kind === "incomplete") {
     return <IncompleteSkeleton className={className} />;
@@ -487,6 +476,14 @@ export function BlockWidget({
     case "mistake":
       return <MistakeCard mistakeType={marker.type} cause={marker.cause} className={className} />;
     case "concept":
+      // Phase 5 §7.2: if the concept looks like a language
+      // term (has article prefix like "der", "die", "das"),
+      // render as a flip card instead of a plain chip.
+      if (isLanguageTerm(marker.name)) {
+        return (
+          <VocabularyCard term={marker.name} className={className} />
+        );
+      }
       return <ConceptChip name={marker.name} className={className} />;
     case "steps":
       return (
@@ -503,6 +500,16 @@ export function BlockWidget({
           options={marker.options}
           correctLabel={marker.correctLabel}
           onAskQuestion={onAskQuestion}
+          {...(onChoicePicked !== undefined ? { onChoicePicked } : {})}
+          {...(streaming !== undefined ? { streaming } : {})}
+          className={className}
+        />
+      );
+    case "code":
+      return (
+        <CodeBlock
+          language={marker.language}
+          code={marker.code}
           className={className}
         />
       );
@@ -679,8 +686,10 @@ function FormulaCard({
  * doesn't pull the full react-markdown + KaTeX
  * bundle a second time. The dynamic import resolves
  * once per client; the module is cached by Next.js.
+ *
+ * `dynamic` is imported once at the top of this file
+ * and reused here.
  */
-import dynamic from "next/dynamic";
 const FormulaExpression = dynamic(
   async () => {
     const m = await import("@/lib/content/aiMarkdown");
@@ -969,6 +978,9 @@ function StepRow({
  * cycle on module resolution. AIMarkdown is already
  * memoized + KaTeX-aware, so reusing it costs
  * nothing.
+ *
+ * `dynamic` is imported once at the top of this file
+ * and reused here.
  */
 const AIMarkdown = dynamic(
   async () => (await import("@/lib/content/aiMarkdown")).AIMarkdown,
@@ -991,22 +1003,91 @@ const AIMarkdown = dynamic(
  * answer" explicitly so they can read the rationale
  * first. This keeps the loop deliberate (the
  * tutor should pause, not auto-feed).
+ *
+ * Phase 4 §6.1 — Choice-click engagement signal:
+ * the widget tracks `interactableAt` (the moment
+ * the choice became clickable, i.e. when the
+ * playground streamed settled OR the structured
+ * response rendered the widget) and computes
+ * `responseTimeMs = Date.now() - interactableAt`
+ * on the user's first click. The signal is
+ * forwarded via `onChoicePicked` so the parent
+ * shell can persist it to Convex strategy state.
+ *
+ * The semantic is: `interactableAt` is the START of
+ * "read time" for the choice. During streaming the
+ * user has not yet seen the choice (the explanation
+ * prose is still rendering), so counting from
+ * `mountTime` would conflate streaming seconds with
+ * engagement seconds. The `streaming` prop flip
+ * from `true` → `false` is the correct anchor.
+ *
+ * In the StructuredResponse path the widget is
+ * rendered with `streaming` undefined (treated as
+ * `false`) so `interactableAt` is set on the very
+ * first render — correct because the parse-and-
+ * render happens in one tick once the JSON is in.
  */
 function ChoiceMenu({
   prompt,
   options,
   correctLabel,
   onAskQuestion,
+  onChoicePicked,
+  streaming,
   className,
 }: {
   readonly prompt: string;
   readonly options: ReadonlyArray<{ label: string; text: string }>;
   readonly correctLabel: string;
   readonly onAskQuestion?: (text: string) => void;
+  /**
+   * Phase 4 §6.1: optional callback fired exactly
+   * once when the user clicks the first option.
+   * `responseTimeMs` is measured from the moment
+   * `streaming` flipped false (or the widget
+   * mounted with `streaming` already false) to
+   * the click. The parent uses it to detect
+   * "passive dismissal" — clicks faster than 2
+   * seconds without engaging.
+   */
+  readonly onChoicePicked?: (signal: {
+    readonly responseTimeMs: number;
+    readonly pickedCorrect: boolean;
+  }) => void;
+  /**
+   * Phase 4 §6.1: whether the parent chat surface
+   * is currently streaming this message. When
+   * `true`, the choice is not yet interactable so
+   * `interactableAt` is left `null`. When this
+   * prop flips to `false`, the useEffect below
+   * stamps `interactableAt = Date.now()` so the
+   * response time measure is "since the user
+   * could actually click", not "since the
+   * component parsed".
+   */
+  readonly streaming?: boolean;
   readonly className?: string;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const groupId = useId();
+  const interactableAtRef = useRef<number | null>(null);
+  const signalFiredRef = useRef<boolean>(false);
+
+  // Stamp interactableAt when the choice becomes
+  // clickable. Mirrors the structured-response path
+  // (mount with `streaming === false` → stamp
+  // instantly) and the streamed path (mount with
+  // `streaming === true` → stamp on flip to false).
+  useEffect(() => {
+    if (streaming === true) {
+      interactableAtRef.current = null;
+      return;
+    }
+    if (interactableAtRef.current === null) {
+      interactableAtRef.current = Date.now();
+    }
+  }, [streaming]);
 
   const correctOption = options.find((o) => o.label === correctLabel);
   const isCorrect = picked !== null && picked === correctLabel;
@@ -1014,6 +1095,30 @@ function ChoiceMenu({
   const handlePick = (label: string) => {
     if (picked !== null) return; // already committed
     setPicked(label);
+    // Phase 4 §6.1: fire the engagement signal
+    // exactly once per widget lifetime. We compute
+    // the latency from the moment the choice
+    // became interactable; if the user clicks
+    // before the streaming flip registered (very
+    // rare race because the streaming flag and
+    // click handler both run on the main thread),
+    // we fall back to a 0ms reading so the
+    // downstream signal is well-defined. The
+    // defence-in-depth `signalFiredRef` prevents a
+    // future refactor from double-firing if, e.g.
+    // ROLLY picks are wired up later.
+    if (!signalFiredRef.current && onChoicePicked) {
+      signalFiredRef.current = true;
+      const startedAt =
+        // eslint-disable-next-line react-hooks/purity
+        interactableAtRef.current ?? Date.now();
+      // eslint-disable-next-line react-hooks/purity
+      const now = Date.now();
+      onChoicePicked({
+        responseTimeMs: Math.max(0, now - startedAt),
+        pickedCorrect: label === correctLabel,
+      });
+    }
   };
 
   return (
@@ -1097,7 +1202,7 @@ function ChoiceMenu({
                     : `I picked ${picked}. Why is ${correctLabel} correct instead?`
                 )
               }
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-[11.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-[11.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
             >
               Ask the tutor to explain
               <ArrowRight className="h-3 w-3" weight="bold" />
@@ -1160,6 +1265,9 @@ function DiagramBlock({
             xmin={diagram.xmin}
             xmax={diagram.xmax}
           />
+        ) : null}
+        {diagram.kind === "molecule" ? (
+          <MoleculeDiagram formula={diagram.formula} />
         ) : null}
       </div>
     </div>
@@ -1333,11 +1441,13 @@ function BarchartDiagram({
 /**
  * GraphDiagram.
  *
- * The MVP graph widget does NOT plot at runtime —
- * instead it renders the formula + range as a
- * compact card with a "rough sketch" hint. A future
- * iteration can swap in a real chart library
- * without changing the marker contract.
+ * Phase 5 §7.1: delegates to the interactive GraphPlotter
+ * canvas widget (zoom, pan, roots, extrema). The previous
+ * placeholder card is replaced by a real plotted curve.
+ *
+ * Note: `dynamic` is imported once at the top of this file
+ * and reused for both FormulaExpression, AIMarkdown, and the
+ * Phase 5 widgets.
  */
 function GraphDiagram({
   formula,
@@ -1349,48 +1459,14 @@ function GraphDiagram({
   readonly xmax: number;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="rounded-lg border border-border/50 bg-background p-3 text-center">
-        <AIMarkdown
-          id={`graph-formula-${formula}`}
-          content={`\\(y = ${stripMathDelimiters(formula)}\\)`}
-          density="compact"
-          className="flex justify-center text-[15px] text-foreground"
-        />
-      </div>
-      <p className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-        <span>x ∈ [xmin,xmax]</span>
-        <span>xmin={xmin}, xmax={xmax}</span>
-      </p>
-      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
-        Sketched at the teller of the formula above. For an interactive
-        plot, open the topic page from the session header.
-      </p>
-    </div>
+    <GraphPlotter
+      formula={formula}
+      xmin={xmin}
+      xmax={xmax}
+    />
   );
 }
 
-/**
- * stripMathDelimiters.
- *
- * Strips wrapping `\(...\)` or `\[...\]` from a
- * formula so we can re-wrap it. Avoids the LLM
- * emitting `\(y = x^2\)` and getting nested
- * delimiters when we re-wrap.
- */
-function stripMathDelimiters(s: string): string {
-  return s.replace(/^\\\((.*)\\\)$/u, "$1").replace(/^\\\[(.*)\\\]$/u, "$1");
-}
-
-/**
- * LinkSurface.
- *
- * Shared visual primitive for clickable floating
- * cards (currently only used by TopicCard). Pulled
- * out so the card's hover treatment is consistent
- * across widget kinds.
- */
-import Link from "next/link";
 function LinkSurface({
   href,
   children,
