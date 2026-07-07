@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Preloaded, usePreloadedQuery } from "convex/react";
+import { usePreloadedQuery } from "convex/react";
 import Link from "next/link";
 
-import { api } from "@/convex/_generated/api";
 import { CockpitStatsRow } from "@/components/dashboard/CockpitStatsRow";
 import { SubjectMasteryStrip } from "@/components/dashboard/SubjectMasteryStrip";
 import { EmptySubjectsState } from "@/components/dashboard/EmptySubjectsState";
@@ -12,6 +11,12 @@ import { ContinueStudyingCard } from "@/components/dashboard/ContinueStudyingCar
 import { RecentActivityStrip } from "@/components/dashboard/RecentActivityStrip";
 import { WhatsNewStrip } from "@/components/dashboard/WhatsNewStrip";
 import { AskTutorCta } from "@/components/dashboard/AskTutorCta";
+import { DailyMissionCard } from "@/components/dashboard/DailyMissionCard";
+import { MistakesRevisitStrip } from "@/components/dashboard/MistakesRevisitStrip";
+import { WeeklyConsistencyGraph } from "@/components/dashboard/WeeklyConsistencyGraph";
+import { GoalCompletionSnapshot } from "@/components/dashboard/GoalCompletionSnapshot";
+import { RecoveredTopicsCard } from "@/components/dashboard/RecoveredTopicsCard";
+import { TimeBySubjectStrip } from "@/components/dashboard/TimeBySubjectStrip";
 import { ArrowRight, Target, UserCircle } from "@/components/landing/icons";
 
 /**
@@ -40,37 +45,45 @@ import { ArrowRight, Target, UserCircle } from "@/components/landing/icons";
  * primitive; only the data subscription crosses the
  * client boundary.
  */
+import type { Tier0Preloads, Tier1Preloads, Tier2Preloads } from "./_lib/types";
+
 export function DashboardOverviewClient({
-  preloaded,
-  subjectsPreloaded,
-  continuePreloaded,
-  recentActivityPreloaded,
-  whatsNewPreloaded,
-  ownedTopicsPreloaded,
+  tier0,
+  tier1,
+  tier2,
   fallbackName,
 }: {
-  readonly preloaded: Preloaded<typeof api.dashboard.getOverview>;
-  readonly subjectsPreloaded: Preloaded<typeof api.subjects.list>;
-  readonly continuePreloaded: Preloaded<
-    typeof api.dashboard.getContinueStudying
-  >;
-  readonly recentActivityPreloaded: Preloaded<
-    typeof api.dashboard.getRecentActivity
-  >;
-  readonly whatsNewPreloaded: Preloaded<
-    typeof api.telemetry.getRecentSystemUpdates
-  >;
-  readonly ownedTopicsPreloaded: Preloaded<
-    typeof api.dashboard.listOwnedTopicsForCurrentUser
-  >;
+  readonly tier0: Tier0Preloads;
+  readonly tier1: Tier1Preloads;
+  readonly tier2: Tier2Preloads;
   readonly fallbackName: string;
 }) {
-  const data = usePreloadedQuery(preloaded);
-  const subjects = usePreloadedQuery(subjectsPreloaded);
-  const continueData = usePreloadedQuery(continuePreloaded);
-  const recentActivity = usePreloadedQuery(recentActivityPreloaded);
-  const whatsNew = usePreloadedQuery(whatsNewPreloaded);
-  const ownedTopics = usePreloadedQuery(ownedTopicsPreloaded);
+  const data = usePreloadedQuery(tier0.overview);
+  const subjects = usePreloadedQuery(tier0.subjects);
+  const continueData = usePreloadedQuery(tier1.continueStudying);
+  const recentActivity = usePreloadedQuery(tier1.recentActivity);
+  const whatsNew = usePreloadedQuery(tier1.whatsNew);
+  const ownedTopics = usePreloadedQuery(tier1.ownedTopics);
+  /* eslint-disable react-hooks/rules-of-hooks */
+  const dailyMission = tier1.dailyMission
+    ? usePreloadedQuery(tier1.dailyMission)
+    : null;
+  const mistakesRevisit = tier2.mistakesRevisit
+    ? usePreloadedQuery(tier2.mistakesRevisit)
+    : [];
+  const weeklyConsistency = tier1.weeklyConsistency
+    ? usePreloadedQuery(tier1.weeklyConsistency)
+    : null;
+  const goalsSnapshot = tier2.goalsSnapshot
+    ? usePreloadedQuery(tier2.goalsSnapshot)
+    : null;
+  const recoveredTopics = tier2.recoveredTopics
+    ? usePreloadedQuery(tier2.recoveredTopics)
+    : [];
+  const timeBySubject = tier2.timeBySubject
+    ? usePreloadedQuery(tier2.timeBySubject)
+    : [];
+  /* eslint-enable react-hooks/rules-of-hooks */
 
   // Map the canonical subjects shape into the lighter
   // shape `EmptySubjectsState` needs (id, slug, title,
@@ -176,6 +189,16 @@ export function DashboardOverviewClient({
           <ArrowRight className="h-3 w-3" weight="bold" />
         </Link>
       )}
+      {dailyMission && <DailyMissionCard data={dailyMission} />}
+      <MistakesRevisitStrip data={mistakesRevisit} />
+      {weeklyConsistency && (
+        <WeeklyConsistencyGraph data={weeklyConsistency} />
+      )}
+      {goalsSnapshot && (
+        <GoalCompletionSnapshot data={goalsSnapshot} />
+      )}
+      <RecoveredTopicsCard data={recoveredTopics} />
+      <TimeBySubjectStrip data={timeBySubject} />
       <RecentActivityStrip data={recentActivity} />
       <WhatsNewStrip updates={whatsNew} />
     </>

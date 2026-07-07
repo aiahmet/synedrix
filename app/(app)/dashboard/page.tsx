@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { fetchQuery, preloadQuery } from "convex/nextjs";
-import { Preloaded } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import { EmptySubjectsState } from "@/components/dashboard/EmptySubjectsState";
 import { ensureSeedBootstrapped } from "@/lib/server/bootstrapSeed";
 import { DashboardOverviewClient } from "./DashboardOverviewClient";
+import type { Tier0Preloads, Tier1Preloads, Tier2Preloads } from "./_lib/types";
 
 /**
  * /dashboard.
@@ -36,9 +36,10 @@ import { DashboardOverviewClient } from "./DashboardOverviewClient";
  * first-pass redirect only.
  */
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) redirect("/sign-in");
 
+  const token = await getToken({ template: "convex" }).catch(() => null);
   const user = await currentUser();
   const firstName = user?.firstName ?? "Student";
 
@@ -51,20 +52,9 @@ export default async function DashboardPage() {
   // renders the empty state if Convex is unreachable.
   await ensureSeedBootstrapped();
 
-  let preloaded: Preloaded<typeof api.dashboard.getOverview> | null = null;
-  let subjectsPreloaded: Preloaded<typeof api.subjects.list> | null = null;
-  let continuePreloaded: Preloaded<
-    typeof api.dashboard.getContinueStudying
-  > | null = null;
-  let recentActivityPreloaded: Preloaded<
-    typeof api.dashboard.getRecentActivity
-  > | null = null;
-  let whatsNewPreloaded: Preloaded<
-    typeof api.telemetry.getRecentSystemUpdates
-  > | null = null;
-  let ownedTopicsPreloaded: Preloaded<
-    typeof api.dashboard.listOwnedTopicsForCurrentUser
-  > | null = null;
+  let tier0: Tier0Preloads | null = null;
+  let tier1: Tier1Preloads | null = null;
+  let tier2: Tier2Preloads | null = null;
   let isConvexConfigured = true;
 
   try {
@@ -73,30 +63,63 @@ export default async function DashboardPage() {
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
         : "UTC";
     try {
-      [preloaded, subjectsPreloaded] = await Promise.all([
-        preloadQuery(api.dashboard.getOverview, { timeZone: dashboardTimeZone }),
-        preloadQuery(api.subjects.list, {}),
+      const [overview, subjects] = await Promise.all([
+        preloadQuery(
+          api.dashboard.getOverview,
+          { timeZone: dashboardTimeZone },
+          token ? { token } : {}
+        ),
+        preloadQuery(api.subjects.list, {}, token ? { token } : {}),
       ]);
+      tier0 = { overview, subjects };
     } catch {
       isConvexConfigured = false;
     }
-    if (preloaded !== null && subjectsPreloaded !== null) {
+    if (tier0 !== null) {
       try {
-        const overview = await fetchQuery(api.dashboard.getOverview, {
-          timeZone: dashboardTimeZone,
-        });
+        const overview = await fetchQuery(
+          api.dashboard.getOverview,
+          { timeZone: dashboardTimeZone },
+          token ? { token } : {}
+        );
         if (!overview.isEmpty) {
-          [
-            continuePreloaded,
-            recentActivityPreloaded,
-            whatsNewPreloaded,
-            ownedTopicsPreloaded,
+          const [
+            continueStudying,
+            recentActivity,
+            whatsNew,
+            ownedTopics,
+            dailyMission,
+            mistakesRevisit,
+            weeklyConsistency,
+            goalsSnapshot,
+            recoveredTopics,
+            timeBySubject,
           ] = await Promise.all([
-            preloadQuery(api.dashboard.getContinueStudying, {}),
-            preloadQuery(api.dashboard.getRecentActivity, { limit: 5 }),
-            preloadQuery(api.telemetry.getRecentSystemUpdates, { limit: 3 }),
-            preloadQuery(api.dashboard.listOwnedTopicsForCurrentUser, {}),
+            preloadQuery(api.dashboard.getContinueStudying, {}, token ? { token } : {}),
+            preloadQuery(api.dashboard.getRecentActivity, { limit: 5 }, token ? { token } : {}),
+            preloadQuery(api.telemetry.getRecentSystemUpdates, { limit: 3 }, token ? { token } : {}),
+            preloadQuery(api.dashboard.listOwnedTopicsForCurrentUser, {}, token ? { token } : {}),
+            preloadQuery(api.dashboard.getDailyMission, {}, token ? { token } : {}),
+            preloadQuery(api.dashboard.getMistakesToRevisit, {}, token ? { token } : {}),
+            preloadQuery(api.dashboard.getWeeklyConsistency, {}, token ? { token } : {}),
+            preloadQuery(api.goals.getSnapshot, {}, token ? { token } : {}),
+            preloadQuery(api.dashboard.getRecoveredTopics, {}, token ? { token } : {}),
+            preloadQuery(api.dashboard.getTimeBySubject, {}, token ? { token } : {}),
           ]);
+          tier1 = {
+            continueStudying,
+            recentActivity,
+            whatsNew,
+            ownedTopics,
+            dailyMission,
+            weeklyConsistency,
+          };
+          tier2 = {
+            mistakesRevisit,
+            goalsSnapshot,
+            recoveredTopics,
+            timeBySubject,
+          };
         }
       } catch {
         isConvexConfigured = false;
@@ -110,31 +133,27 @@ export default async function DashboardPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-6 sm:gap-7">
       <header className="flex flex-col gap-1.5 pt-1">
         <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          / dashboard
+          / cockpit
         </span>
         <h1 className="text-balance text-[clamp(1.6rem,2.2vw+0.5rem,2rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
-          Welcome back, {firstName}.
+          Willkommen zurück, {firstName}.
         </h1>
         <p className="max-w-xl text-pretty text-[13.5px] leading-relaxed text-muted-foreground">
-          One row for your mastery, three signals for the loop, and a
-          single place to start. Your state from the last session is
-          already loaded.
+          Eine Reihe für deinen Lernstand, drei Signale für den Lernkreislauf und ein
+          zentraler Ort zum Starten. Dein Zustand aus der letzten Sitzung ist bereits geladen.
         </p>
       </header>
 
-      {preloaded &&
-      subjectsPreloaded &&
-      continuePreloaded &&
-      recentActivityPreloaded &&
-      whatsNewPreloaded &&
-      ownedTopicsPreloaded ? (
+      {tier0 && tier1 ? (
         <DashboardOverviewClient
-          preloaded={preloaded}
-          subjectsPreloaded={subjectsPreloaded}
-          continuePreloaded={continuePreloaded}
-          recentActivityPreloaded={recentActivityPreloaded}
-          whatsNewPreloaded={whatsNewPreloaded}
-          ownedTopicsPreloaded={ownedTopicsPreloaded}
+          tier0={tier0}
+          tier1={tier1}
+          tier2={tier2 ?? {
+            mistakesRevisit: null,
+            goalsSnapshot: null,
+            recoveredTopics: null,
+            timeBySubject: null,
+          }}
           fallbackName={firstName}
         />
       ) : (
@@ -143,11 +162,11 @@ export default async function DashboardPage() {
 
       {!isConvexConfigured && (
         <p className="mt-2 text-center font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          Convex offline. Showing empty state. Run{" "}
+          Convex offline. Zeige leeren Zustand. Führe{" "}
           <code className="rounded bg-surface px-1.5 py-0.5 text-foreground">
             npx convex dev
           </code>{" "}
-          to wire the cockpit.
+          aus, um das Cockpit zu verbinden.
         </p>
       )}
     </div>
