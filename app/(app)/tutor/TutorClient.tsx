@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -8,62 +8,36 @@ import { useMutation, useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useLocalStorage } from "@/lib/utils/useLocalStorage";
+import { extractText } from "@/lib/ai/uiMessage";
 import type { ChatGrounding } from "@/lib/ai/prompts/chat";
-import { SessionHeader } from "@/components/tutor/SessionHeader";
 import { HistoryPanel } from "@/components/tutor/HistoryPanel";
-import { MemoryPanel } from "@/components/tutor/MemoryPanel";
 import { Composer } from "@/components/tutor/Composer";
 import { MessageList } from "@/components/tutor/MessageList";
+import { TutorTopBar } from "@/components/tutor/TutorTopBar";
+import { TutorDrawer } from "@/components/tutor/TutorDrawer";
 
 /**
  * TutorClient.
  *
- * The single client island on /tutor. Owns the
- * 3-pane layout (collapsible history | AI Copilot
- * | Memory panel), the top SessionHeader, and the
- * bottom Composer.
+ * The single client island on /tutor. Subscribes
+ * to the Convex thread + messages + inline-
+ * practice queries and composes:
  *
- * Layout:
+ *   - TutorTopBar (subject + history trigger)
+ *   - chat column (empty space when no messages;
+ *     MessageList when there is a thread)
+ *   - sticky Composer at the bottom
+ *   - HistoryDrawer (Threads) on the left
  *
- *   ┌────────────────────────────────────────────────────────┐
- *   │  SessionHeader                                          │
- *   ├──────────┬─────────────────────────────────┬────────────┤
- *   │ History  │   AI Copilot                    │  Memory    │
- *   │ (left)   │   (chat + composer)             │  (right)   │
- *   └──────────┴─────────────────────────────────┴────────────┘
- *
- * On widths below the `lg` Tailwind breakpoint the
- * right Memory panel collapses; below `md` the left
- * History panel also collapses to a rail. The collapse
- * states are persisted via `useLocalStorage`.
- *
- * Note about Convex reactivity: the chat stream
- * triggers useChat re-renders on every token, but
- * `MemoryPanel` is rendered in a separate pane and
- * subscribes to its OWN query (`getMemorySnapshot`),
- * so Convex reactivity flows independently of the
- * chat stream. The panel therefore updates its
- * mastery ring + weaknesses block the moment a
- * mastery bump lands — even mid-stream.
- *
- * Two-component split: the outer component owns
- * Convex thread + reads; the inner TutorChat owns
- * the useChat instance. The split is required by
- * React's rules-of-hooks (useChat must always be
- * called, never conditionally) and the inner
- * component is keyed on (subjectId, topicId) so a
- * thread change remounts with a clean state init.
+ * On a fresh /tutor load, the only visible chrome
+ * above the input is the top bar. The composer
+ * input is the empty state. The chat itself is the
+ * resume surface — there is no separate end-
+ * session panel, no per-session mode indicator,
+ * and no Memory drawer. History is the only drawer
+ * the user can open from the top bar.
  */
-export function TutorClient({
-  subjectId,
-  topicId,
-  subject,
-  topic,
-  sessionId,
-  composerInitialText,
-  lessonContext,
-}: {
+export function TutorClient(props: {
   readonly subjectId: Id<"subjects">;
   readonly topicId: Id<"topics"> | null;
   readonly subject: {
@@ -75,181 +49,146 @@ export function TutorClient({
   readonly sessionId: string | null;
   readonly composerInitialText: string | null;
   readonly lessonContext: ChatGrounding["lessonContext"] | undefined;
+  readonly backHref: string | null;
+  readonly focusItemId: string | null;
 }) {
-  // Persisted collapse state. We read the third tuple
-  // slot (`hydrated`) from `useLocalStorage` so we can
-  // gate the inner shell render until localStorage has
-  // resolved — this avoids the visible "+ collapse
-  // jump" on a returning user where SSR renders the
-  // default (expanded) state and the client's first
-  // effect flips it to the persisted value. Gating the
-  // whole shell on `hydrated` makes the swap invisible
-  // to the user even though the persisted state differs
-  // from the server default.
-  const [historyCollapsed, setHistoryCollapsed, historyHydrated] =
-    useLocalStorage<boolean>("tutor.historyCollapsed", false);
-  const [memoryCollapsed, setMemoryCollapsed, memoryHydrated] =
-    useLocalStorage<boolean>("tutor.memoryCollapsed", false);
-  const uiHydrated = historyHydrated && memoryHydrated;
-
-  const ensureThread = useMutation(api.tutor.ensureThread);
-  const markThreadRead = useMutation(api.tutor.markThreadRead);
-  const thread = useQuery(
-    api.tutor.getThread,
-    { subjectId, topicId: topicId ?? undefined }
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [input, setInput] = useState<string>(
+    () => props.composerInitialText ?? ""
   );
 
-  useEffect(() => {
-    if (thread === null) {
-      void ensureThread({ subjectId, topicId: topicId ?? undefined });
-    }
-  }, [thread, ensureThread, subjectId, topicId]);
-
-  // Mark the thread read on first view AND when the
-  // user navigates away from it. The previous
-  // thread id is captured in a ref so the cleanup
-  // fires `markThreadRead` on the thread the user is
-  // leaving, not the one they are entering.
-  const prevThreadIdRef = useRef<Id<"tutorThreads"> | null>(null);
-  useEffect(() => {
-    if (thread) {
-      const prev = prevThreadIdRef.current;
-      if (prev && prev !== thread.id) {
-        void markThreadRead({ threadId: prev });
-      }
-      void markThreadRead({ threadId: thread.id });
-      prevThreadIdRef.current = thread.id;
-    }
-    return () => {
-      const current = prevThreadIdRef.current;
-      if (current) {
-        void markThreadRead({ threadId: current });
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread?.id]);
-
+  const thread = useQuery(api.tutor.getThread, {
+    subjectId: props.subjectId,
+    topicId: props.topicId ?? undefined,
+  });
   const convexMessages = useQuery(
     api.tutor.listMessages,
     thread ? { threadId: thread.id } : "skip"
   );
+  const inlinePractices = useQuery(
+    api.tutorPractice.getInlineSessionsForThread,
+    thread ? { threadId: thread.id } : "skip"
+  );
 
-  const memorySnapshot = useQuery(api.tutorMemory.getMemorySnapshot, {
-    subjectId,
-    topicId: topicId ?? undefined,
-  });
+  useEnsureThread(thread?.id ?? null, props);
+  useMarkThreadReadOnFocus(thread?.id ?? null);
 
   const isReady = Boolean(thread) && convexMessages !== undefined;
 
-  // Gate both the shell render AND the inner TutorChat
-  // mount on (a) Convex thread + history resolved AND
-  // (b) localStorage hydration complete. The second
-  // constraint prevents a hydration mismatch on the
-  // first paint when the persisted collapse state
-  // differs from the server default. We render the
-  // same `ShellSkeleton` until both are ready so SSR
-  // markup and the first client render agree exactly.
-  if (!isReady || !uiHydrated) {
+  if (!isReady) {
     return <ShellSkeleton />;
   }
 
-  return (
-    <TutorChat
-      key={`${subjectId}-${topicId ?? "subject"}${lessonContext ? "-lesson" : ""}`}
-      threadId={thread!.id}
-      subjectId={subjectId}
-      topicId={topicId}
-      subject={subject}
-      topic={topic}
-      sessionId={sessionId}
-      initialMessages={(convexMessages ?? []).map(toUIMessage)}
-      initialMessageCount={convexMessages?.length ?? 0}
-      composerInitialText={composerInitialText}
-      lessonContext={lessonContext}
-      historyCollapsed={historyCollapsed}
-      memoryCollapsed={memoryCollapsed}
-      onToggleHistory={() => setHistoryCollapsed((v) => !v)}
-      onToggleMemory={() => setMemoryCollapsed((v) => !v)}
-      memorySnapshot={memorySnapshot}
-    />
-  );
-}
+  const conversationKey = `${props.subjectId}-${
+    props.topicId ?? "subject"
+  }${props.lessonContext ? "-lesson" : ""}`;
 
-/**
- * ShellSkeleton.
- *
- * Faithful skeleton for the new 3-pane layout so the
- * page does not flash a raw spinner on first paint.
- */
-function ShellSkeleton() {
   return (
-    <div className="mx-auto flex h-[calc(100dvh-7rem)] max-w-[1480px] flex-col gap-3.5">
-      <div className="flex flex-col gap-2.5">
-        <div className="flex items-center gap-1.5">
-          <div className="h-5 w-20 animate-pulse rounded-full bg-muted/30" />
-          <div className="h-5 w-24 animate-pulse rounded-full bg-muted/30" />
-          <div className="h-5 w-32 animate-pulse rounded-full bg-muted/30" />
-        </div>
-        <div className="h-7 w-72 animate-pulse rounded bg-muted/30" />
-        <div className="flex gap-2">
-          <div className="h-6 w-24 animate-pulse rounded-full bg-muted/30" />
-          <div className="h-6 w-32 animate-pulse rounded-full bg-muted/30" />
-          <div className="h-6 w-28 animate-pulse rounded-full bg-muted/30" />
-        </div>
-      </div>
-      <div className="grid h-full min-h-0 flex-1 grid-cols-1 gap-3.5 md:grid-cols-[18rem_1fr] xl:grid-cols-[18rem_1fr_22rem]">
-        <div className="hidden h-full animate-pulse rounded-2xl bg-muted/20 md:block" />
-        <div className="flex h-full min-h-0 flex-col gap-4">
-          <div className="flex-1 animate-pulse rounded-2xl bg-muted/15" />
-          <div className="h-24 animate-pulse rounded-2xl bg-muted/30" />
-        </div>
-        <div className="hidden h-full animate-pulse rounded-2xl bg-muted/20 xl:block" />
-      </div>
+    <div className="flex min-h-[100dvh] flex-col bg-background">
+      <TutorTopBar
+        subject={props.subject}
+        {...(props.topic ? { topic: props.topic } : {})}
+        {...(props.subject.color !== undefined
+          ? { subjectColor: props.subject.color }
+          : {})}
+        backHref={props.backHref}
+        onToggleHistory={() => setHistoryOpen(true)}
+        historyUnreadCount={0}
+      />
+      <TutorChat
+        key={conversationKey}
+        input={input}
+        setInput={setInput}
+        threadId={thread!.id}
+        subjectId={props.subjectId}
+        topicId={props.topicId}
+        subject={props.subject}
+        topic={props.topic}
+        sessionId={props.sessionId}
+        initialMessages={(convexMessages ?? []).map(toUIMessage)}
+        composerInitialText={props.composerInitialText}
+        lessonContext={
+          props.lessonContext
+            ? props.focusItemId
+              ? { ...props.lessonContext, focusItemId: props.focusItemId }
+              : props.lessonContext
+            : undefined
+        }
+        inlinePractices={inlinePractices ?? []}
+      />
+      <TutorDrawer
+        side="left"
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        label="Threads"
+      >
+        <HistoryPanel
+          currentSubjectId={props.subjectId}
+          currentTopicId={props.topicId}
+          collapsed={false}
+          onToggleCollapse={() => setHistoryOpen(false)}
+        />
+      </TutorDrawer>
     </div>
   );
 }
 
-/**
- * Convert a Convex tutorMessage row into a UIMessage.
- */
-function toUIMessage(m: {
-  id: Id<"tutorMessages">;
-  role: "user" | "assistant";
-  content: string;
-}): UIMessage {
-  return {
-    id: m.id as string,
-    role: m.role,
-    parts: [{ type: "text", text: m.content }],
-  };
+function useEnsureThread(
+  threadId: Id<"tutorThreads"> | null,
+  props: {
+    readonly subjectId: Id<"subjects">;
+    readonly topicId: Id<"topics"> | null;
+    readonly lessonContext: ChatGrounding["lessonContext"] | undefined;
+    readonly focusItemId: string | null;
+  }
+) {
+  const ensureThread = useMutation(api.tutor.ensureThread);
+  const inflightRef = useRef(false);
+  useEffect(() => {
+    if (threadId !== null) return;
+    if (inflightRef.current) return;
+    inflightRef.current = true;
+    const ctx = props.lessonContext
+      ? {
+          ...props.lessonContext,
+          items: [...props.lessonContext.items],
+          mistakes: [...props.lessonContext.mistakes],
+          ...(props.focusItemId ? { focusItemId: props.focusItemId } : {}),
+        }
+      : undefined;
+    void ensureThread({
+      subjectId: props.subjectId,
+      topicId: props.topicId ?? undefined,
+      ...(ctx ? { lessonContext: ctx } : {}),
+    })
+      .catch((err) => console.error("[tutor] ensureThread failed", err))
+      .finally(() => {
+        inflightRef.current = false;
+      });
+  }, [threadId, ensureThread, props]);
 }
 
-/**
- * TutorChat.
- *
- * Owns the useChat instance + composer state. Mounted
- * by TutorClient once the Convex thread + history have
- * resolved. Renders the 3-pane shell + SessionHeader
- * and routes the chat surface through the new
- * rich-message MessageList.
- */
-function TutorChat({
-  threadId,
-  subjectId,
-  topicId,
-  subject,
-  topic,
-  sessionId,
-  initialMessages,
-  initialMessageCount,
-  composerInitialText,
-  lessonContext,
-  historyCollapsed,
-  memoryCollapsed,
-  onToggleHistory,
-  onToggleMemory,
-  memorySnapshot,
-}: {
+function useMarkThreadReadOnFocus(threadId: Id<"tutorThreads"> | null) {
+  const markThreadRead = useMutation(api.tutor.markThreadRead);
+  const lastIdRef = useRef<Id<"tutorThreads"> | null>(null);
+  useEffect(() => {
+    if (threadId === null) return;
+    const prev = lastIdRef.current;
+    if (prev && prev !== threadId) {
+      void markThreadRead({ threadId: prev }).catch((err) => {
+        console.error("[tutor] markThreadRead cleanup failed", err);
+      });
+    }
+    void markThreadRead({ threadId }).catch((err) => {
+      console.error("[tutor] markThreadRead failed", err);
+    });
+    lastIdRef.current = threadId;
+  }, [threadId, markThreadRead]);
+}
+
+function TutorChat(props: {
+  readonly input: string;
+  readonly setInput: React.Dispatch<React.SetStateAction<string>>;
   readonly threadId: Id<"tutorThreads">;
   readonly subjectId: Id<"subjects">;
   readonly topicId: Id<"topics"> | null;
@@ -261,177 +200,200 @@ function TutorChat({
   readonly topic: { readonly slug: string; readonly title: string } | null;
   readonly sessionId: string | null;
   readonly initialMessages: readonly UIMessage[];
-  readonly initialMessageCount: number;
   readonly composerInitialText: string | null;
   readonly lessonContext: ChatGrounding["lessonContext"] | undefined;
-  readonly historyCollapsed: boolean;
-  readonly memoryCollapsed: boolean;
-  readonly onToggleHistory: () => void;
-  readonly onToggleMemory: () => void;
-  /**
-   * Memory snapshot pulled by the parent shell. Passed
-   * down so the SessionHeader / MemoryPanel use the
-   * same value and avoid two `useQuery` subscriptions.
-   */
-  readonly memorySnapshot:
-    | NonNullable<
-        (typeof api.tutorMemory.getMemorySnapshot)["_returnType"]
-      >
-    | null
-    | undefined;
+  readonly inlinePractices: ReadonlyArray<{
+    readonly id: Id<"inlineTutorSessions">;
+    readonly anchorMessageId: string;
+    readonly startedAt: number;
+    readonly subjectId: Id<"subjects">;
+    readonly topicId: Id<"topics"> | null;
+    readonly completedAt: number | null;
+  }>;
 }) {
   const chatId = useMemo(
     () =>
-      `tutor-${subjectId}-${topicId ?? "subject"}${lessonContext ? "-lesson" : ""}`,
-    [subjectId, topicId, lessonContext]
+      `tutor-${props.subjectId}-${props.topicId ?? "subject"}${
+        props.lessonContext ? "-lesson" : ""
+      }`,
+    [props.subjectId, props.topicId, props.lessonContext]
   );
-
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/tutor/chat",
         body: {
-          threadId: threadId as string,
-          subjectId: subjectId as string,
-          ...(topicId ? { topicId: topicId as string } : {}),
-          ...(lessonContext ? { lessonContext } : {}),
+          threadId: props.threadId as string,
+          subjectId: props.subjectId as string,
+          ...(props.topicId ? { topicId: props.topicId as string } : {}),
+          ...(props.lessonContext ? { lessonContext: props.lessonContext } : {}),
+          ...(props.sessionId ? { sessionId: props.sessionId } : {}),
         },
       }),
-    [threadId, subjectId, topicId, lessonContext]
+    [
+      props.threadId,
+      props.subjectId,
+      props.topicId,
+      props.lessonContext,
+      props.sessionId,
+    ]
   );
+
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const { messages, sendMessage, status, stop, error, regenerate } = useChat({
     id: chatId,
     transport,
-    messages: [...initialMessages],
+    messages: [...props.initialMessages],
     experimental_throttle: 50,
     onError: (err) => {
       if (process.env.NODE_ENV !== "production") {
-         
         console.error("[tutor] useChat stream error:", err);
       }
     },
   });
-  const wrappedRegenerate = (): void => {
-    // The AI SDK's regenerate returns a Promise; we
-    // forward without awaiting so the consumer's
-    // `() => void` requirement stays honored. Errors
-    // here are logged but never propagated to the UI
-    // because the underlying SDK will surface them
-    // through its own status state.
+  const wrappedRegenerate = useCallback((): void => {
     regenerate().catch((err) => {
-       
       console.error("[tutor] regenerate failed", err);
     });
-  };
+  }, [regenerate]);
 
-  const [input, setInput] = useState("");
-
-  const initialTextRef = useRef<string | null>(composerInitialText);
+  const autoRetryAttemptedRef = useRef(false);
   useEffect(() => {
-    if (
-      initialTextRef.current &&
-      initialTextRef.current.length > 0 &&
-      input.length === 0
-    ) {
-      setInput(initialTextRef.current);
-      initialTextRef.current = null;
+    if (status === "error" && !autoRetryAttemptedRef.current) {
+      autoRetryAttemptedRef.current = true;
+      wrappedRegenerate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (status === "ready") {
+      autoRetryAttemptedRef.current = false;
+    }
+  }, [status, wrappedRegenerate]);
+
+  const inlinePracticeRequestingRef = useRef(false);
+  const [inlinePracticeRequestingLocal, setInlinePracticeRequestingLocal] =
+    useState(false);
+  const handleInlinePracticeRequested = useCallback(() => {
+    if (!props.topicId) return;
+    if (inlinePracticeRequestingRef.current) return;
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    if (!lastAssistant) return;
+    inlinePracticeRequestingRef.current = true;
+    setInlinePracticeRequestingLocal(true);
+    const recentTurns = messages.slice(-12).flatMap((m) => {
+      const text = extractText(m);
+      if (text.length === 0) return [];
+      const role = m.role === "user" ? ("user" as const) : ("assistant" as const);
+      return [{ role, text }];
+    });
+    fetch("/api/tutor/practice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: props.threadId as string,
+        subjectId: props.subjectId as string,
+        topicId: props.topicId as string,
+        topicTitle: props.topic?.title ?? "",
+        anchorMessageId: lastAssistant.id,
+        turns: recentTurns,
+        gradeLevel: null,
+        language: "en",
+      }),
+    })
+      .catch((err) => console.error("[tutor] inline-practice fetch failed", err))
+      .finally(() => {
+        inlinePracticeRequestingRef.current = false;
+        setInlinePracticeRequestingLocal(false);
+      });
+  }, [
+    messages,
+    props.topicId,
+    props.topic,
+    props.threadId,
+    props.subjectId,
+  ]);
+
+  const { setInput } = props;
+  const handleSummarizeRequested = useCallback(() => {
+    setInput(
+      "Summarize the key concepts we covered in this thread so far, in 3-4 sentences."
+    );
+  }, [setInput]);
 
   const onSubmit = (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
     void sendMessage({ text: trimmed });
-    setInput("");
+    props.setInput("");
   };
 
-  const onPickSuggestion = (text: string) => {
-    setInput(text);
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+        const isEditable =
+          tag === "input" ||
+          tag === "textarea" ||
+          tag === "select" ||
+          document.activeElement?.getAttribute("contenteditable") === "true";
+        if (!isEditable) {
+          e.preventDefault();
+          composerRef.current?.focus();
+        }
+        return;
+      }
+      if (e.key === "Escape" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (status === "submitted" || status === "streaming") {
+          e.preventDefault();
+          stop();
+        }
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [status, stop]);
 
-  // Derived state from the memory snapshot. We
-  // tolerate `undefined` (loading) and `null` (no
-  // user row) without crashing — the SessionHeader
-  // falls back to neutral defaults.
-  const mastery = (memorySnapshot && memorySnapshot.topic?.mastery) ?? 0;
-  const confidence = (memorySnapshot && memorySnapshot.topic?.confidence) ?? 0;
-  const focusGoal = memorySnapshot?.focusGoal ?? null;
-  const estimatedMinutesToMastery =
-    memorySnapshot?.estimatedMinutesToMastery ?? null;
-  const difficulty = memorySnapshot?.topic?.difficulty ?? null;
-  const objectiveSummary =
-    (memorySnapshot &&
-      memorySnapshot.topic &&
-      (lessonContext?.topicTitle
-        ? `Discussing your last practice — ${lessonContext.topicTitle} (graded ${lessonContext.grade}).`
-        : null)) ||
-    null;
-
-  const fallbackLessonHref = topic
-    ? `/subjects/${subject.slug}/${topic.slug}`
-    : `/subjects/${subject.slug}`;
+  const fallbackLessonHref = props.topic
+    ? `/subjects/${props.subject.slug}/${props.topic.slug}`
+    : `/subjects/${props.subject.slug}`;
+  const practiceHref = props.topic
+    ? `/subjects/${props.subject.slug}/${props.topic.slug}/practice`
+    : null;
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-7rem)] w-full max-w-[1480px] flex-col gap-3.5">
-      {lessonContext ? <LessonContextBanner context={lessonContext} /> : null}
-      {/*
-        `key={sessionId ?? "none"}` forces a full remount of
-        `SessionHeader` when the active session changes. The
-        header's `startedAt` initialiser is `Date.now()`, so
-        remounting re-anchors the elapsed-time counter against
-        the new mount — replacing the prior
-        setState-in-useEffect workaround. The sub-tree is thin
-        (no expensive local state), so the remount cost is
-        negligible; the win is removing the
-        `react-hooks/set-state-in-effect` lint disable.
-      */}
-      <SessionHeader
-        key={sessionId ?? "none"}
-        subject={subject}
-        topic={topic}
-        subjectColor={subject.color}
-        sessionId={sessionId}
-        threadMessageCount={Math.max(messages.length, initialMessageCount)}
-        focusGoal={focusGoal}
-        mastery={mastery}
-        confidence={confidence}
-        estimatedMinutesToMastery={estimatedMinutesToMastery}
-        difficulty={difficulty}
-        objectiveSummary={objectiveSummary}
-      />
-
-      <div className="grid h-full min-h-0 flex-1 grid-cols-1 gap-3.5 md:grid-cols-[18rem_1fr] xl:grid-cols-[18rem_1fr_22rem]">
-        <HistoryPanel
-          currentSubjectId={subjectId}
-          currentTopicId={topicId}
-          collapsed={historyCollapsed}
-          onToggleCollapse={onToggleHistory}
-        />
-        <section
-          aria-label="AI Copilot"
-          className="flex h-full min-h-0 flex-col gap-3.5"
-        >
-          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border bg-surface-elevated p-1.5 shadow-[var(--shadow-soft)]">
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-xl bg-background px-3 sm:px-5">
-              <MessageList
-                messages={messages}
-                status={status}
-                topicTitle={topic?.title ?? null}
-                onPickSuggestion={onPickSuggestion}
-                onRegenerate={
-                  messages.some((m) => m.role === "assistant")
-                    ? wrappedRegenerate
-                    : undefined
-                }
-                topicId={topicId ?? null}
-              />
-            </div>
+    <main className="flex min-h-0 flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 sm:px-6">
+        {messages.length > 0 ? (
+          <div className="flex-1 py-4">
+            <MessageList
+              messages={messages}
+              status={status}
+              topicTitle={props.topic?.title ?? null}
+              onRegenerate={
+                messages.some((m) => m.role === "assistant")
+                  ? wrappedRegenerate
+                  : undefined
+              }
+              topicId={props.topicId ?? null}
+              subjectId={props.subjectId}
+              practiceHref={practiceHref}
+              threadId={props.threadId as string}
+              inlinePractices={props.inlinePractices}
+              onInlinePracticeRequested={
+                props.topicId ? handleInlinePracticeRequested : undefined
+              }
+            />
           </div>
+        ) : (
+          <div className="flex-1" />
+        )}
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-background/85 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:-mx-6 sm:px-6">
           <Composer
-            input={input}
-            setInput={setInput}
+            ref={composerRef}
+            input={props.input}
+            setInput={props.setInput}
             onSubmit={onSubmit}
             status={status}
             onStop={stop}
@@ -441,67 +403,53 @@ function TutorChat({
                 ? wrappedRegenerate
                 : undefined
             }
+            onInlinePracticeRequested={
+              props.topicId ? handleInlinePracticeRequested : undefined
+            }
+            inlinePracticeRequesting={inlinePracticeRequestingLocal}
+            onSummarizeRequested={handleSummarizeRequested}
             fallbackLessonHref={fallbackLessonHref}
+            subject={props.subject}
+            topic={props.topic}
+            hasMessages={messages.length > 0}
           />
-        </section>
-        <MemoryPanel
-          subjectId={subjectId}
-          topicId={topicId}
-          collapsed={memoryCollapsed}
-          onToggleCollapse={onToggleMemory}
-        />
+        </div>
       </div>
+    </main>
+  );
+}
+
+function ShellSkeleton() {
+  return (
+    <div className="flex min-h-[100dvh] flex-col bg-background">
+      <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
+        <div className="h-6 w-16 animate-pulse rounded bg-muted/30" />
+      </header>
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-4 py-6">
+        <div className="h-7 w-3/4 animate-pulse rounded bg-muted/30" />
+        <div className="flex flex-col gap-2">
+          <div className="h-4 w-full animate-pulse rounded bg-muted/20" />
+          <div className="h-4 w-5/6 animate-pulse rounded bg-muted/20" />
+          <div className="h-4 w-4/6 animate-pulse rounded bg-muted/20" />
+        </div>
+        <div className="mt-auto h-24 animate-pulse rounded-2xl bg-muted/20" />
+      </main>
     </div>
   );
 }
 
-/**
- * LessonContextBanner.
- *
- * Quiet banner shown above the title when the user
- * arrived here from the results page (`?lesson=<runId>`).
- * Mirrors the prior banner but rendered narrower to
- * match the new shell.
- */
-function LessonContextBanner({
-  context,
-}: {
-  readonly context: NonNullable<ChatGrounding["lessonContext"]>;
-}) {
-  const gradeTone =
-    context.grade === "1" || context.grade === "2"
-      ? "var(--subject-chemistry)"
-      : context.grade === "3"
-        ? "var(--subject-german)"
-        : "var(--subject-french)";
-  return (
-    <div
-      role="status"
-      className="flex items-start gap-3 rounded-xl border border-accent-border/40 bg-accent-subtle/30 px-3.5 py-2.5"
-    >
-      <span
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
-        style={{
-          backgroundColor: `color-mix(in srgb, ${gradeTone} 14%, transparent)`,
-          borderColor: `color-mix(in srgb, ${gradeTone} 36%, transparent)`,
-        }}
-        aria-hidden
-      >
-        <span
-          className="text-[15px] font-semibold leading-none tracking-[-0.02em]"
-          style={{ color: gradeTone }}
-        >
-          {context.grade}
-        </span>
-      </span>
-      <p className="text-[12.5px] leading-relaxed text-foreground/90">
-        Discussing your last practice on{" "}
-        <span className="font-semibold tracking-tight text-foreground">
-          {context.topicTitle}
-        </span>{" "}
-        (grade {context.grade} on the German 1–6 scale). The tutor can refer
-        to per-item feedback and stronger answers — drop any follow-up below.
-      </p>
-    </div>
-  );
+function toUIMessage(m: {
+  id: Id<"tutorMessages">;
+  role: "user" | "assistant";
+  content: string;
+  structuredContent?: string;
+}): UIMessage {
+  return {
+    id: m.id as string,
+    role: m.role,
+    parts: [{ type: "text", text: m.content }],
+    ...(m.structuredContent
+      ? { metadata: { structured: m.structuredContent } }
+      : {}),
+  };
 }

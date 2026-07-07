@@ -8,7 +8,6 @@ import type { Id } from "@/convex/_generated/dataModel";
 
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils/cn";
-import { resolveColorVar } from "@/lib/utils/subjectColor";
 import { formatRelativeDate } from "@/lib/format/relativeDate";
 
 /**
@@ -65,10 +64,12 @@ export function HistoryPanel({
     >
       <header className="flex items-center justify-between px-2.5">
         <span className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-subtle/70 text-accent" aria-hidden>
-            <ChatCircleText className="h-3 w-3" weight="duotone" />
-          </span>
-          <h2 className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+          <ChatCircleText
+            aria-hidden
+            className="h-4 w-4 text-muted-foreground"
+            weight="duotone"
+          />
+          <h2 className="text-[12.5px] font-medium tracking-[-0.005em] text-foreground">
             Threads
           </h2>
         </span>
@@ -94,7 +95,7 @@ export function HistoryPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search threads"
-          className="w-full rounded-lg border border-border bg-surface-elevated py-1.5 pl-8 pr-2 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+          className="w-full rounded-md border border-border bg-surface-elevated py-1.5 pl-8 pr-2 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground/40 transition-colors"
         />
       </div>
 
@@ -140,7 +141,7 @@ function CollapsedRail({ onToggleCollapse }: { readonly onToggleCollapse: () => 
         type="button"
         onClick={onToggleCollapse}
         aria-label="Open thread history"
-        className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground text-background transition-all hover:opacity-90 active:scale-[0.97]"
+        className="flex h-9 w-9 items-center justify-center rounded-md bg-foreground text-background transition-colors hover:opacity-90"
       >
         <CaretRight className="h-4 w-4" weight="bold" />
       </button>
@@ -160,8 +161,8 @@ function CollapsedRail({ onToggleCollapse }: { readonly onToggleCollapse: () => 
  * groupByTimeBucket.
  *
  * Pure client-side bucketing. Returns buckets in
- * canonical order: Pinned, Today, Yesterday, This
- * Week, Older. Empty input (= empty Convex result)
+ * canonical order: Today, Yesterday, This Week,
+ * Older. Empty input (= empty Convex result)
  * returns an empty array so the `SidebarEmpty`
  * branch renders. Each bucket carries the time
  * label + thread rows already filtered by the
@@ -279,7 +280,7 @@ function TimeBucket({
 }) {
   return (
     <section className="flex flex-col gap-1.5">
-      <h3 className="px-2.5 font-mono text-[9.5px] uppercase tracking-[0.18em] text-muted-foreground">
+      <h3 className="px-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
         {bucket.label}
       </h3>
       <ol className="flex flex-col gap-0.5">
@@ -328,32 +329,26 @@ function ThreadRow({
   const href = thread.topicId
     ? `/tutor?subject=${thread.subjectId}&topic=${thread.topicId}`
     : `/tutor?subject=${thread.subjectId}`;
-  const fillVar = resolveColorVar(subject.color);
   return (
     <li>
       <Link
         href={href}
         aria-current={isCurrent ? "page" : undefined}
         className={cn(
-          "group flex flex-col gap-1 rounded-lg border border-transparent px-2 py-2 transition-colors",
+          "group flex flex-col gap-1 rounded-md px-2 py-1.5 transition-colors",
           isCurrent
-            ? "border-accent-border/50 bg-accent-subtle/40"
-            : "hover:border-border hover:bg-surface-elevated"
+            ? "bg-surface-elevated"
+            : "hover:bg-surface-elevated"
         )}
       >
         <div className="flex items-start justify-between gap-2.5">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span
-              aria-hidden
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: fillVar }}
-            />
+          <span className="flex min-w-0 items-center">
             <span className="truncate text-[12.5px] font-medium text-foreground">
               {thread.title ?? "Thread"}
             </span>
           </span>
           {thread.lastMessageAt ? (
-            <span className="shrink-0 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground/70">
+            <span className="shrink-0 text-[10.5px] text-muted-foreground/70">
               {formatRelativeDate(thread.lastMessageAt)}
             </span>
           ) : null}
@@ -364,13 +359,13 @@ function ThreadRow({
             : "No messages yet."}
         </p>
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground/80">
+          <span className="text-[10.5px] text-muted-foreground/80">
             {subject.title}
           </span>
           {thread.unreadCount > 0 ? (
             <span
               aria-label={`${thread.unreadCount} unread message${thread.unreadCount === 1 ? "" : "s"}`}
-              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1.5 font-mono text-[9.5px] font-semibold text-accent-foreground"
+              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-semibold tabular-nums text-accent-foreground"
             >
               {thread.unreadCount > 9 ? "9+" : thread.unreadCount}
             </span>

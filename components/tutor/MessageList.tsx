@@ -1,85 +1,72 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
 import type { UIMessage } from "@ai-sdk/react";
-import {
-  isReasoningUIPart,
-  isTextUIPart,
-} from "ai";
-import {
-  ChatCircleText,
-  Pulse,
-  Sparkle,
-  User as UserIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import { isReasoningUIPart, isTextUIPart } from "ai";
+import type { Id } from "@/convex/_generated/dataModel";
 
-import {
-  cn,
-} from "@/lib/utils/cn";
+import { cn } from "@/lib/utils/cn";
 import { extractText } from "@/lib/ai/uiMessage";
 import { AIMarkdown } from "@/lib/content/aiMarkdown";
 import { parseBlockMarker, BlockWidget } from "@/lib/content/tutorWidgets";
 import { ReasoningPart } from "./ReasoningPart";
-import { SuggestionDock } from "./SuggestionDock";
 import { MessageActions } from "./MessageActions";
-import { StreamingIndicator } from "./StreamingIndicator";
+import { InlinePractice } from "./InlinePractice";
+import {
+  StructuredResponse,
+  tryParseStructured,
+} from "./StructuredResponse";
 
 /**
  * MessageList.
  *
- * The chat surface for the AI Copilot. Renders the
- * tutor thread with rich per-message chrome:
+ * The chat surface on /tutor. Renders the thread
+ * as a single column with no per-message chrome
+ * other than the per-message MessageActions
+ * toolbar (copy / re-roll / practice). No per-
+ * message avatars, no per-message timestamps, no
+ * chip strips above or below the conversation.
  *
- *   - Study timeline timestamp column on the LEFT
- *     (similar to Notion's history view: the user
- *     always knows the message hour).
- *   - User messages right-aligned with a compact
- *     bubble; assistant messages left-aligned with
- *     a wider bubble.
- *   - Per-message action toolbar (Helpful, Re-roll,
- *     Flashcards, Note, Practice, Copy, Share) on
- *     hover/always-visible on touch.
- *   - Six pre-built suggestion chips (SuggestionDock)
- *     under each *settled* assistant message.
- *   - Block widgets (Floating card, Reveal step,
- *     Choice menu, Diagram) for `[[…]]` markers
- *     emitted by the model.
- *
- * Streaming state: when `status` is "submitted" the
- * list shows a quiet placeholder chip + a four-stage
- * indicator. When the status is "streaming" the
- * assistant message animates content in via the
- * existing AIMarkdown + KaTeX pipeline.
- *
- * The widget parser (`parseBlockMarker`) is invoked
- * per-part on every text part of the assistant
- * message — a single-line block becomes a single
- * widget, multi-paragraph blocks are still parsed
- * markdown. Streaming safety: while a marker is open
- * (`[[steps:…` but no `]]` yet) the widget renders
- * a Pulse skeleton rather than the raw markdown.
+ * The assistant bubble is text-only (no border,
+ * no background, no shadow); the user bubble stays
+ * a subtle right-aligned accent block so the chat
+ * reads as an asymmetric conversation, not one
+ * column of body text.
  */
 export function MessageList({
   messages,
   status,
   topicTitle,
-  onPickSuggestion,
   onRegenerate,
   topicId,
+  subjectId,
+  practiceHref,
+  threadId,
+  inlinePractices,
+  onInlinePracticeRequested,
+  onChoicePicked,
 }: {
   readonly messages: readonly UIMessage[];
   readonly status: "submitted" | "streaming" | "ready" | "error";
   readonly topicTitle: string | null;
-  readonly onPickSuggestion: (text: string) => void;
-  /**
-   * Re-issues the most recent assistant message.
-   * The parent passes it as undefined during the
-   * stream (and on the very first user turn before
-   * any assistant reply), per the AI SDK UI docs
-   * "Cancellation and regeneration".
-   */
   readonly onRegenerate: (() => void) | undefined;
   readonly topicId: string | null;
+  readonly subjectId: Id<"subjects"> | null;
+  readonly practiceHref: string | null;
+  readonly threadId: string | null;
+  readonly inlinePractices: ReadonlyArray<{
+    readonly id: Id<"inlineTutorSessions">;
+    readonly anchorMessageId: string;
+    readonly startedAt: number;
+    readonly subjectId: Id<"subjects">;
+    readonly topicId: Id<"topics"> | null;
+    readonly completedAt: number | null;
+  }>;
+  readonly onInlinePracticeRequested?: () => void;
+  readonly onChoicePicked?: (
+    messageId: string,
+    signal: { responseTimeMs: number; pickedCorrect: boolean }
+  ) => void;
 }) {
   const bottomRef = useRef<HTMLLIElement>(null);
   const canRegenerate =
@@ -100,73 +87,155 @@ export function MessageList({
     [messages]
   );
 
+  // Scroll-yank guard. The auto-scroll-to-bottom effect below
+  // fires on every streaming chunk; without this guard the
+  // user's scroll position is reset to the bottom mid-stream
+  // the moment they tried to read an older message. We track
+  // whether the user is currently near the bottom (<=80px gap
+  // between the viewport and the document end) via
+  // `IntersectionObserver` on the bottom sentinel below. The
+  // observer fires the initial state synchronously when we
+  // call `.observe(...)`, which mirrors the old `computeNearBottom`
+  // immediate-call behaviour. We do NOT use a `scroll` listener
+  // — running JS on every scroll frame is jank-prone and
+  // re-renders the React tree without batching.
+  const nearBottomRef = useRef(true);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, totalLength]);
+    const sentinel = bottomRef.current;
+    if (!sentinel) return;
+    // Synchronous initial evaluation mirrors the old
+    // `computeNearBottom()` mount-time call. The
+    // IntersectionObserver fires its first callback
+    // on the next paint, but the auto-scroll
+    // useEffect below reads `nearBottomRef.current`
+    // during the same commit — running it eagerly
+    // here prevents a one-frame yank-back when a
+    // user re-enters a thread with stored scroll
+    // position.
+    const rect = sentinel.getBoundingClientRect();
+    nearBottomRef.current = rect.top - window.innerHeight <= 80;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) {
+          nearBottomRef.current = entry.isIntersecting;
+        }
+      },
+      { rootMargin: "0px 0px 80px 0px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
 
-  if (messages.length === 0) {
-    return <EmptyState />;
-  }
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!threadId) return;
+    if (messages.length === 0) return;
+    const key = `tutor.lastRead.${threadId}`;
+    const stored = window.localStorage.getItem(key);
+    if (!stored) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      return;
+    }
+    const target = document.querySelector<HTMLElement>(
+      `[data-message-id="${stored}"]`
+    );
+    if (target) {
+      target.scrollIntoView({ behavior: "auto", block: "start" });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+    window.localStorage.removeItem(key);
+  }, [threadId, messages.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!threadId) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      return;
+    }
+    const key = `tutor.lastRead.${threadId}`;
+    if (window.localStorage.getItem(key)) return;
+    // Respect the user's scroll position: do not yank them back
+    // to the bottom if they have scrolled up to re-read an
+    // earlier turn. The thread is still reactive (new chunks
+    // extend the document height); they can choose to scroll
+    // down again by tapping the composer or using a manual
+    // jump-to-bottom affordance.
+    if (!nearBottomRef.current) return;
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, totalLength, threadId]);
 
   return (
     <ol
       aria-label="Tutor thread"
-      className="flex flex-col gap-3 px-1 pb-3 pt-4 sm:px-2"
+      className="flex flex-col gap-5 px-1 pb-3 pt-4 sm:px-2"
     >
+      <li aria-hidden className="sr-only">
+        <p aria-live="polite" aria-atomic="true">
+          {status === "submitted" || status === "streaming"
+            ? "Tutor is preparing a response."
+            : status === "ready"
+              ? "Tutor finished."
+              : "Tutor hit an error."}
+        </p>
+      </li>
       {messages.map((m, messageIdx) => {
-        const ts = messageTimestamp(m);
         const isLast = messageIdx === messages.length - 1;
-        // Per-message streaming flag. Only the last
-        // *assistant* message is "currently streaming";
-        // everything else is settled and falls back to
-        // the user-controlled reveal pattern in StepReveal
-        // and the standard markdown render in AIMarkdown.
         const isStreaming =
           isLast &&
           m.role === "assistant" &&
           (status === "submitted" || status === "streaming");
+        const structuredRaw =
+          m.role === "assistant" && !isStreaming
+            ? (m.metadata as Record<string, unknown> | null)?.structured
+            : undefined;
+        const isAssistantSettled = typeof structuredRaw === "string";
+
         return (
-          <li
-            key={m.id}
-            className={cn(
-              "group/row flex w-full gap-3",
-              m.role === "user" ? "justify-end" : "justify-start"
-            )}
-          >
-            <TimelineColumn ts={ts} />
-            <div
+          <Fragment key={m.id}>
+            <li
+              data-message-id={m.id}
               className={cn(
-                "flex min-w-0 flex-col",
-                m.role === "user" ? "items-end max-w-[88%]" : "items-start max-w-[88%]"
+                "flex w-full",
+                m.role === "user" ? "justify-end" : "justify-start"
               )}
             >
-              <MessageBubble
-                message={m}
-                streaming={isStreaming}
-                onPickSuggestion={onPickSuggestion}
-                onRegenerate={onRegenerate}
-                canRegenerate={canRegenerate}
-                topicId={topicId}
-              />
-              {m.role === "assistant" && isLast && (
-                <StreamingIndicator status={status} />
-              )}
-              {m.role === "assistant" && !isLast && (
-                <SuggestionDock
+              <div
+                className={cn(
+                  "flex min-w-0 flex-col",
+                  m.role === "user"
+                    ? "max-w-[88%] items-end"
+                    : "max-w-full items-start"
+                )}
+              >
+                <MessageBubble
+                  message={m}
+                  streaming={isStreaming}
+                  onRegenerate={onRegenerate}
+                  canRegenerate={canRegenerate}
+                  topicId={topicId}
+                  practiceHref={practiceHref}
+                  hasStructured={isAssistantSettled}
+                  structuredJson={isAssistantSettled ? structuredRaw : undefined}
+                  onInlinePracticeRequested={onInlinePracticeRequested}
+                  onChoicePicked={
+                    onChoicePicked
+                      ? (signal) => onChoicePicked(m.id, signal)
+                      : undefined
+                  }
+                  subjectId={subjectId}
                   topicTitle={topicTitle}
-                  onPick={onPickSuggestion}
-                  isStreaming={status === "submitted" || status === "streaming"}
                 />
-              )}
-              {m.role === "assistant" && isLast && status === "ready" && (
-                <SuggestionDock
-                  topicTitle={topicTitle}
-                  onPick={onPickSuggestion}
-                  isStreaming={false}
-                />
-              )}
-            </div>
-          </li>
+                {m.role === "assistant" &&
+                  inlinePractices
+                    .filter((s) => s.anchorMessageId === m.id)
+                    .map((s) => (
+                      <InlinePractice key={s.id} sessionId={s.id} />
+                    ))}
+              </div>
+            </li>
+          </Fragment>
         );
       })}
       <li aria-hidden ref={bottomRef} className="h-px" />
@@ -174,123 +243,35 @@ export function MessageList({
   );
 }
 
-/**
- * TimelineColumn.
- *
- * Left-side timestamp column on every message. The
- * hour:minute format is dense enough for a glance
- * without sacrificing precision.
- *
- * SSR-safe: `messageTimestamp` derives from the
- * Convex `_creationTime` already on every message;
- * for messages that have no creation time (AI SDK
- * streams) we fall back to the local clock.
- */
-function TimelineColumn({ ts }: { readonly ts: number }) {
-  return (
-    <div
-      aria-hidden={false}
-      aria-label={new Date(ts).toLocaleString()}
-      className="mt-1 hidden shrink-0 select-none flex-col items-end gap-0.5 md:flex"
-    >
-      <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground/70">
-        {formatHourMinute(ts)}
-      </span>
-      <span className="h-1.5 w-1.5 rounded-full bg-border" />
-    </div>
-  );
-}
-
-function formatHourMinute(ts: number): string {
-  const d = new Date(ts);
-  const h = d.getHours().toString().padStart(2, "0");
-  const m = d.getMinutes().toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-/**
- * messageTimestamp.
- *
- * Reads the message's `_creationTime` from the UIMessage
- * id if available; otherwise falls back to Date.now().
- * The id format from the AI SDK does not encode a time
- * stamp reliably so we lean on the source rows where
- * possible.
- */
-function messageTimestamp(m: UIMessage): number {
-  // Best-effort: AI SDK UIMessages carry a string id
-  // we cannot parse for a millisecond epoch. We pull
-  // a denormalized `createdAt` if the parent passes
-  // one via metadata; otherwise we read Date.now().
-  const meta = m.metadata as { createdAt?: number } | undefined;
-  if (meta?.createdAt && Number.isFinite(meta.createdAt)) {
-    return meta.createdAt;
-  }
-  return Date.now();
-}
-
-/**
- * EmptyState.
- *
- * Quiet landing for an empty thread. The visual
- * reads as "your AI is ready" rather than "oh no,
- * something is broken" — important for a fresh
- * first-time user.
- */
-function EmptyState() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle/60 text-accent" aria-hidden>
-        <Sparkle className="h-5 w-5" weight="duotone" />
-      </span>
-      <p className="text-[13.5px] font-medium text-foreground">
-        Ready when you are
-      </p>
-      <p className="max-w-sm text-[12.5px] leading-relaxed text-muted-foreground">
-        Drop a question below and the tutor will ground its answer in your
-        mastery, recent mistakes, and the topic&apos;s objectives.
-      </p>
-    </div>
-  );
-}
-
-/**
- * MessageBubble.
- *
- * Per-message renderer. Assistant messages get the
- * rich timeline bubble (with widget parser on each
- * text part + ReasoningPartition when reasoning is
- * present); user messages get a simpler right-aligned
- * bubble.
- *
- * The user's text is plain (whitespace-preserved,
- * no markdown rendering) because shaping the user's
- * own text would distort their intent. The Assistant
- * text goes through AIMarkdown so it gets KaTeX +
- * sanitization + block-level memoization.
- */
 function MessageBubble({
   message,
   streaming,
-  onPickSuggestion,
   onRegenerate,
   canRegenerate,
   topicId,
+  practiceHref,
+  hasStructured,
+  structuredJson,
+  onInlinePracticeRequested,
+  onChoicePicked,
+  subjectId,
+  topicTitle,
 }: {
   readonly message: UIMessage;
-  /**
-   * Threads the chat-status `streaming` flag into
-   * the assistant text render. `true` for the last
-   * assistant message while useChat is submitted or
-   * streaming; `false` for everything else (user
-   * messages, older assistant messages, and the
-   * post-stream settled state).
-   */
   readonly streaming: boolean;
-  readonly onPickSuggestion: (text: string) => void;
   readonly onRegenerate: (() => void) | undefined;
   readonly canRegenerate: boolean;
   readonly topicId: string | null;
+  readonly practiceHref: string | null;
+  readonly hasStructured: boolean;
+  readonly structuredJson?: string;
+  readonly onInlinePracticeRequested?: () => void;
+  readonly onChoicePicked?: (signal: {
+    readonly responseTimeMs: number;
+    readonly pickedCorrect: boolean;
+  }) => void;
+  readonly subjectId?: string | null;
+  readonly topicTitle?: string | null;
 }) {
   const isUser = message.role === "user";
   const userText = isUser ? extractText(message) : "";
@@ -298,111 +279,77 @@ function MessageBubble({
   return (
     <div
       className={cn(
-        "flex w-full gap-2.5",
+        "flex w-full",
         isUser ? "justify-end" : "justify-start"
       )}
     >
-      {!isUser && (
-        <span
-          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"
-          aria-hidden
-        >
-          <Sparkle className="h-3.5 w-3.5" weight="duotone" />
-        </span>
-      )}
-      <div
-        className={cn(
-          "max-w-full rounded-2xl px-4 py-2.5",
-          isUser
-            ? "rounded-br-md bg-accent text-accent-foreground"
-            : "rounded-bl-md border border-border bg-surface-elevated text-foreground shadow-[var(--shadow-soft)]"
-        )}
-      >
+      <div className="min-w-0">
         {isUser ? (
-          <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
-            {userText.length > 0 ? userText : ""}
-          </p>
+          <div className="rounded-2xl rounded-br-md bg-foreground/10 px-4 py-2.5 text-foreground">
+            <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
+              {userText.length > 0 ? userText : ""}
+            </p>
+          </div>
         ) : (
           <AssistantParts
             parts={message.parts}
             messageId={message.id}
             streaming={streaming}
-            onPickSuggestion={onPickSuggestion}
+            hasStructured={hasStructured}
+            structuredJson={structuredJson}
+            onChoicePicked={onChoicePicked}
+          />
+        )}
+        {!isUser && (
+          <MessageActions
+            messageText={userText.length > 0 ? userText : extractText(message)}
+            topicId={topicId}
+            onRegenerate={canRegenerate ? onRegenerate : undefined}
+            canRegenerate={canRegenerate}
+            practiceHref={practiceHref}
+            onInlinePracticeRequested={onInlinePracticeRequested}
+            subjectId={subjectId}
+            topicTitle={topicTitle}
           />
         )}
       </div>
-      {!isUser && (
-        <span
-          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-elevated text-muted-foreground"
-          aria-hidden
-        >
-          <ChatCircleText className="h-3.5 w-3.5" weight="duotone" />
-        </span>
-      )}
-      {isUser && (
-        <span
-          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
-          aria-hidden
-        >
-          <UserIcon className="h-3.5 w-3.5" weight="duotone" />
-        </span>
-      )}
-      {!isUser && (
-        <MessageActions
-          messageText={extractText(message)}
-          topicId={topicId}
-          onRegenerate={canRegenerate ? onRegenerate : undefined}
-          canRegenerate={canRegenerate}
-        />
-      )}
     </div>
   );
 }
 
-/**
- * AssistantParts.
- *
- * Renders the per-part stream of an assistant
- * UIMessage. The widget parser runs on EACH text
- * part so a `[[steps:...]]` block becomes an
- * interactive `StepReveal` rather than raw text.
- * 
- * Streaming edge: incomplete markers render a
- * Pulse skeleton via `BlockWidget({ marker: { kind:
- * "incomplete" } })` so the user sees the widget
- * shaping up while tokens arrive.
- */
 function AssistantParts({
   parts,
   messageId,
   streaming,
-  onPickSuggestion,
+  hasStructured,
+  structuredJson,
+  onChoicePicked,
 }: {
   readonly parts: UIMessage["parts"];
   readonly messageId: string;
-  /**
-   * Whether this assistant message is currently
-   * being streamed. Forwarded into `<AIMarkdown>`
-   * and `<BlockWidget>` so stream-sensitive widgets
-   * (`StepReveal`) can auto-emerge progressively
-   * instead of waiting for the user's manual reveal.
-   */
   readonly streaming: boolean;
-  readonly onPickSuggestion: (text: string) => void;
+  readonly hasStructured: boolean;
+  readonly structuredJson?: string;
+  readonly onChoicePicked?: (signal: {
+    readonly responseTimeMs: number;
+    readonly pickedCorrect: boolean;
+  }) => void;
 }) {
-  if (parts.length === 0) {
+  if (hasStructured && !streaming) {
+    const rawText = parts
+      .filter((p) => isTextUIPart(p))
+      .map((p) => (p as { text: string }).text)
+      .join("");
+    const structuredParsed = tryParseStructured(
+      structuredJson ?? rawText
+    );
     return (
-      <span
-        className="inline-flex items-center gap-1 text-[13.5px] text-muted-foreground"
-        aria-label="Tutor is preparing a response"
-      >
-        <Pulse
-          aria-hidden
-          className="h-3.5 w-3.5 animate-pulse text-accent"
-          weight="duotone"
-        />
-        ...
-      </span>
+      <StructuredResponse
+        structured={structuredParsed}
+        rawText={rawText}
+        messageId={messageId}
+        onChoicePicked={onChoicePicked}
+      />
     );
   }
 
@@ -419,11 +366,6 @@ function AssistantParts({
           );
         }
         if (isTextUIPart(part)) {
-          // For each text part, attempt to parse as a
-          // single-block widget marker. The parser is
-          // strict about the marker being the WHOLE
-          // block — multi-paragraph markdown stays
-          // markdown.
           if (part.text.length > 0) {
             const marker = parseBlockMarker(part.text);
             if (marker !== null) {
@@ -432,7 +374,7 @@ function AssistantParts({
                   key={`w-${idx}`}
                   marker={marker}
                   streaming={streaming}
-                  onAskQuestion={onPickSuggestion}
+                  onChoicePicked={onChoicePicked}
                 />
               );
             }

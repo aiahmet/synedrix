@@ -58,6 +58,17 @@ export default async function TutorPage({
     session?: string;
     q?: string;
     lesson?: string;
+    focusItemId?: string;
+    /**
+     * Plan §3.3: the referrer path. When the user
+     * clicked a "Discuss with tutor" CTA on another
+     * page, the page that built the URL appended
+     * `?from=<current path>` so the tutor's "Back"
+     * link routes back to the right place. Falls
+     * through to the breadcrumb chain (topic page
+     * or subject page) when missing.
+     */
+    from?: string;
   }>;
 }) {
   const { userId } = await auth();
@@ -69,7 +80,24 @@ export default async function TutorPage({
     session: sessionId,
     q: composerQ,
     lesson: lessonRunId,
+    focusItemId,
+    from: fromPath,
   } = await searchParams;
+
+  // Plan §3.3: validate the `?from=` referrer. We
+  // accept only same-origin relative paths so a
+  // malicious deep link cannot redirect the user
+  // to an external site via the tutor "Back" link.
+  // The check rejects absolute URLs, protocol-
+  // relative URLs (`//evil.com/...`), and encoded
+  // protocol-relative URLs (`%2F%2Fevil.com`).
+  const sanitizedFromHref =
+    typeof fromPath === "string" &&
+    fromPath.startsWith("/") &&
+    !fromPath.startsWith("//") &&
+    !/^%2[fF]%2[fF]/i.test(fromPath)
+      ? fromPath
+      : null;
 
   if (!subjectSlug) {
     return <MissingContext />;
@@ -181,6 +209,8 @@ export default async function TutorPage({
       sessionId={validatedSessionId}
       composerInitialText={composerInitialText}
       lessonContext={lessonContext}
+      backHref={sanitizedFromHref}
+      focusItemId={focusItemId ?? null}
     />
   );
 }
@@ -287,17 +317,11 @@ function MissingContext() {
     <div className="mx-auto max-w-2xl">
       <CockpitCard>
         <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <span
-            className="flex h-10 w-10 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--accent) 14%, transparent)",
-              color: "var(--accent)",
-            }}
+          <ChatCircleText
             aria-hidden
-          >
-            <ChatCircleText className="h-5 w-5" weight="duotone" />
-          </span>
+            className="h-5 w-5 shrink-0 text-accent"
+            weight="duotone"
+          />
           <div className="flex flex-col gap-1">
             <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
               Pick a subject to start
@@ -310,7 +334,7 @@ function MissingContext() {
           </div>
           <Link
             href="/subjects"
-            className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+            className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:opacity-90"
           >
             <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
             Back to subjects
@@ -338,17 +362,11 @@ function SubjectNotFound({
     <div className="mx-auto max-w-2xl">
       <CockpitCard>
         <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <span
-            className="flex h-10 w-10 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--subject-physics) 14%, transparent)",
-              color: "var(--subject-physics)",
-            }}
+          <ChatCircleText
             aria-hidden
-          >
-            <ChatCircleText className="h-5 w-5" weight="duotone" />
-          </span>
+            className="h-5 w-5 shrink-0 text-subject-physics"
+            weight="duotone"
+          />
           <div className="flex flex-col gap-1">
             <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
               No subject matches &ldquo;{subjectSlug}&rdquo;
@@ -364,14 +382,14 @@ function SubjectNotFound({
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2.5">
             <Link
               href="/subjects"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface"
             >
               <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
               Back to subjects
             </Link>
             <Link
               href="/dashboard"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
             >
               Open dashboard
               <ArrowUpRight className="h-3.5 w-3.5" weight="bold" />
@@ -398,17 +416,11 @@ function OfflineFallback({
     <div className="mx-auto max-w-3xl">
       <CockpitCard>
         <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <span
-            className="flex h-10 w-10 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--subject-physics) 14%, transparent)",
-              color: "var(--subject-physics)",
-            }}
+          <ChatCircleText
             aria-hidden
-          >
-            <ChatCircleText className="h-5 w-5" weight="duotone" />
-          </span>
+            className="h-5 w-5 shrink-0 text-subject-physics"
+            weight="duotone"
+          />
           <div className="flex flex-col gap-1">
             <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
               Could not load tutor for &ldquo;{subjectSlug}&rdquo;
@@ -422,7 +434,7 @@ function OfflineFallback({
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2.5">
             <Link
               href="/subjects"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-all hover:opacity-90 active:scale-[0.98]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface"
             >
               <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
               Back to subjects

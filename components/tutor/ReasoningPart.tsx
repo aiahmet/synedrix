@@ -9,40 +9,7 @@ import {
 import { Brain, CaretDown, Sparkle } from "@phosphor-icons/react/dist/ssr";
 
 import { cn } from "@/lib/utils/cn";
-
-/**
- * Auto-collapse threshold (chars). Reasoning chains shorter than this
- * stay open when they finish because they read at a glance; longer
- * traces collapse so the user focuses on the answer unless they opt
- * to peek behind the curtain.
- */
 const AUTO_COLLAPSE_THRESHOLD = 280;
-
-/**
- * deriveInitialOpen.
- *
- * Decides whether a reasoning trace should ship in the
- * collapsed or expanded state on first render. The
- * rationale:
- *
- *  - **Live** (`state === "streaming"`): always open so the
- *    user sees tokens land as they arrive.
- *  - **Settled and short** (`state === "done"` and within
- *    the visibility threshold): stays open — these read
- *    at a glance ("Looking up the formula. Found it.").
- *  - **Settled and long** (`state === "done"` and past the
- *    threshold): starts collapsed so the final answer
- *    above-the-fold isn't pushed by older traces the
- *    user already dwelled through.
- *
- * Crucially, this is computed from props at mount time
- * only — so the *first* render after hydration matches
- * the *SSR* render deterministically. (Calling
- * `setOpen(false)` inside a `useEffect` would fire a
- * second render post-hydration and produce a visible
- * flicker on settled long traces, plus trigger the
- * "setState synchronously in effect" lint rule.)
- */
 function deriveInitialOpen(
   text: string,
   state: "streaming" | "done"
@@ -51,43 +18,8 @@ function deriveInitialOpen(
   return text.length <= AUTO_COLLAPSE_THRESHOLD;
 }
 
-/**
- * ReasoningPart.
- *
- * Renders an AI SDK `ReasoningUIPart` (Deepseek / OpenAI o-series
- * / Anthropic extended-thinking models emit one of these BEFORE the
- * final text part). The streaming UI is deliberately understated:
- *
- *  - A soft pill with a `Brain` icon (no neon, no outer glow).
- *  - A calm pulse on the icon during the live stream, suppressed
- *    under `prefers-reduced-motion`.
- *  - Mono-flavoured reasoning body so it reads as the model's
- *    inner monologue rather than a polished reply.
- *  - Collapsible once the chain is done, with an animated height
- *    transition and a rotating caret.
- *  - A faint shimmer line at the bottom of the live content so
- *    the user sees that tokens are still arriving.
- *
- * The component is the only place in the tutor surface that knows
- * about reasoning parts, so future redesigns scope to this file
- * alone. It is `"use client"` (motion uses effects) but stateless
- * across renders other than the local `open` toggle.
- *
- * The render returns a Fragment so the screen-reader live-region
- * is a *sibling* of the `role="group"` landmark — assistive tech
- * does not conflate the live copy ("Reasoning finished") with the
- * landmark label on a single focus pass.
- */
 export interface ReasoningPartProps {
-  /** Reasoning text dumped so far by the model. */
   readonly text: string;
-  /**
-   * Per-part streaming state from the AI SDK. Mirrors the
-   * `TextUIPart.state` / `ReasoningUIPart.state` discriminated
-   * union on `UIMessagePart`. Caller defaults to `"done"`
-   * when undefined so historical messages from Convex render
-   * in their settled form.
-   */
   readonly state: "streaming" | "done";
 }
 
@@ -96,9 +28,6 @@ export function ReasoningPart({
   state,
 }: ReasoningPartProps) {
   const reduce = useReducedMotion();
-  // Initial value is derived from props so the first
-  // render (SSR + first client render) match. The user can
-  // still toggle freely afterwards.
   const [open, setOpen] = useState(() =>
     deriveInitialOpen(text, state)
   );
@@ -127,17 +56,15 @@ export function ReasoningPart({
           aria-controls="reasoning-content"
           data-testid="reasoning-toggle"
           className={cn(
-            "group flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
+            "group flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left",
             "outline-none transition-colors duration-200",
             "hover:bg-accent-subtle/70",
-            "focus-visible:bg-accent-subtle/70 focus-visible:ring-2",
-            "focus-visible:ring-ring focus-visible:ring-offset-1",
-            "focus-visible:ring-offset-accent-subtle/40"
+            "focus-visible:bg-accent-subtle/70",
+            "focus-visible:border focus-visible:border-foreground",
+            "focus-visible:ring-1 focus-visible:ring-foreground/40"
           )}
         >
-          {/* Brain icon with a calm pulse halo when the chain is
-              live. The halo is purely decorative and is suppressed
-              under reduced-motion. */}
+          {}
           <span
             className="relative flex h-4 w-4 shrink-0 items-center justify-center"
             aria-hidden
@@ -164,9 +91,7 @@ export function ReasoningPart({
             Reasoning
           </span>
 
-          {/* Live/settled status chip — the LIVE chip breathes a slow
-              opacity ramp; the SETTLED chip swaps to a tiny sparkle so
-              the seam between live and done stays quiet. */}
+          {}
           {isLive ? (
             <span
               data-testid="reasoning-status-live"
@@ -238,8 +163,6 @@ export function ReasoningPart({
                   "relative border-t border-accent-border/30 px-3 py-2.5",
                   "font-mono text-[11.5px] leading-[1.55]",
                   "text-muted-foreground",
-                  // Show trailing whitespace so a long running
-                  // reasoning chain visibly extends as it grows.
                   "whitespace-pre-wrap break-words"
                 )}
               >
