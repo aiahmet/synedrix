@@ -39,7 +39,7 @@ export function HistoryPanel({
   readonly collapsed: boolean;
   readonly onToggleCollapse: () => void;
 }) {
-  const groups = useQuery(api.tutor.listThreadsForSidebar);
+  const groups = useQuery(api.tutorHistory.listThreadsForSidebar);
   const [query, setQuery] = useState("");
 
   // Filter + group by time buckets on the client so we
@@ -131,7 +131,7 @@ export function HistoryPanel({
  * sidebar collapsed by default without losing access.
  */
 function CollapsedRail({ onToggleCollapse }: { readonly onToggleCollapse: () => void }) {
-  const groups = useQuery(api.tutor.listThreadsForSidebar);
+  const groups = useQuery(api.tutorHistory.listThreadsForSidebar);
   const unreadTotal = groups
     ? groups.reduce((acc, g) => acc + g.threads.reduce((s, t) => s + t.unreadCount, 0), 0)
     : 0;

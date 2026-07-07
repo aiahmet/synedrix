@@ -382,11 +382,11 @@ export const getMemoryChronicle = query({
     const subject = await ctx.db.get(subjectId);
     if (!subject) return null;
 
-    // ── 1. Recent completed sessions ───────────────────
+    // ── 1. Recent completed sessions (capped at 50) ────
     const allSessions = await ctx.db
       .query("studySessions")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+      .take(50);
 
     const completed = allSessions
       .filter((s) => typeof s.completedAt === "number")

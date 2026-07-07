@@ -104,20 +104,29 @@ export const getInlineSessionsForThread = query({
     })
   ),
   handler: async (ctx, { threadId }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return [];
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionsForThread took ${ms}ms`);
+      return [];
+    }
 
     // The thread id is not user-scoped (we store the thread
     // row id), so we have to verify ownership through the
     // thread row before reading session data.
     const thread = await ctx.db.get(threadId);
-    if (!thread || thread.userId !== user._id) return [];
+    if (!thread || thread.userId !== user._id) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionsForThread took ${ms}ms`);
+      return [];
+    }
 
     const sessions = await ctx.db
       .query("inlineTutorSessions")
       .withIndex("by_thread_started", (q) => q.eq("threadId", threadId))
       .collect();
-    return sessions
+    const result = sessions
       .map((s) => ({
         id: s._id,
         threadId: s.threadId,
@@ -131,6 +140,9 @@ export const getInlineSessionsForThread = query({
         grade: s.grade ?? null,
       }))
       .sort((a, b) => a.startedAt - b.startedAt);
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionsForThread took ${ms}ms`);
+    return result;
   },
 });
 
@@ -181,16 +193,29 @@ export const getInlineSessionForRunner = query({
     v.null()
   ),
   handler: async (ctx, { sessionId }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return null;
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionForRunner took ${ms}ms`);
+      return null;
+    }
     const session = await ctx.db.get(sessionId);
-    if (!session) return null;
+    if (!session) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionForRunner took ${ms}ms`);
+      return null;
+    }
 
     // Ownership chain: session.threadId -> thread.userId
     // (the thread is the durable ownership surface, the
     // session is just a derived view).
     const thread = await ctx.db.get(session.threadId);
-    if (!thread || thread.userId !== user._id) return null;
+    if (!thread || thread.userId !== user._id) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionForRunner took ${ms}ms`);
+      return null;
+    }
 
     const items = await ctx.db
       .query("practiceItems")
@@ -223,7 +248,7 @@ export const getInlineSessionForRunner = query({
       if (attempt) latestByItem.set(item._id, attempt);
     }
 
-    return {
+    const result = {
       session: {
         id: session._id,
         threadId: session.threadId,
@@ -257,6 +282,9 @@ export const getInlineSessionForRunner = query({
         };
       }),
     };
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getInlineSessionForRunner took ${ms}ms`);
+    return result;
   },
 });
 
@@ -600,8 +628,12 @@ export const getSubjectSlug = query({
   args: { subjectId: v.id("subjects") },
   returns: v.union(v.string(), v.null()),
   handler: async (ctx, { subjectId }) => {
+    const start = Date.now();
     const subject = await ctx.db.get(subjectId);
-    return subject?.slug ?? null;
+    const result = subject?.slug ?? null;
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getSubjectSlug took ${ms}ms`);
+    return result;
   },
 });
 
@@ -620,19 +652,39 @@ export const getInlineItemForGrading = query({
     v.null()
   ),
   handler: async (ctx, { sessionId, itemId }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return null;
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineItemForGrading took ${ms}ms`);
+      return null;
+    }
     const session = await ctx.db.get(sessionId);
-    if (!session) return null;
+    if (!session) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineItemForGrading took ${ms}ms`);
+      return null;
+    }
     const thread = await ctx.db.get(session.threadId);
-    if (!thread || thread.userId !== user._id) return null;
+    if (!thread || thread.userId !== user._id) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineItemForGrading took ${ms}ms`);
+      return null;
+    }
     const item = await ctx.db.get(itemId);
-    if (!item || item.practiceSetId !== session.practiceSetId) return null;
-    return {
+    if (!item || item.practiceSetId !== session.practiceSetId) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getInlineItemForGrading took ${ms}ms`);
+      return null;
+    }
+    const result = {
       prompt: item.question,
       expectedAnswer: item.answer,
       skill: item.skills[0] ?? "allgemein",
       rubric: item.rubric ?? [],
     };
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getInlineItemForGrading took ${ms}ms`);
+    return result;
   },
 });

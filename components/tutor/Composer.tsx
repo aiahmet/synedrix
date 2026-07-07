@@ -13,13 +13,15 @@ import {
   ArrowUp,
   Cards,
   Function as FunctionIcon,
-  GraduationCap,
   Keyboard,
   Lightning,
-  ListChecks,
   PaperPlaneTilt,
   Sparkle,
   Stop,
+  ClipboardText,
+  Scales,
+  Target as TargetIcon,
+  Notebook,
 } from "@phosphor-icons/react/dist/ssr";
 
 import { cn } from "@/lib/utils/cn";
@@ -46,7 +48,7 @@ export type ComposerProps = {
   readonly onRegenerate?: () => void;
   readonly onInlinePracticeRequested?: () => void;
   readonly inlinePracticeRequesting: boolean;
-  readonly onSummarizeRequested?: () => void;
+  readonly onSubmitMode?: (text: string, mode: "summarize" | "exam" | "compare") => void;
   readonly fallbackLessonHref: string | null;
   readonly subject?: SubjectContext | null;
   readonly topic?: TopicContext | null;
@@ -116,7 +118,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
       onRegenerate,
       onInlinePracticeRequested,
       inlinePracticeRequesting,
-      onSummarizeRequested,
+      onSubmitMode,
       fallbackLessonHref,
       subject,
       topic,
@@ -224,7 +226,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
       {
         key: "practice",
         label: "Open practice set",
-        icon: <GraduationCap className="h-3.5 w-3.5" weight="duotone" />,
+        icon: <TargetIcon className="h-3.5 w-3.5" weight="duotone" />,
         run: () => {
           if (fallbackLessonHref && typeof window !== "undefined") {
             window.open(fallbackLessonHref, "_blank", "noopener,noreferrer");
@@ -233,15 +235,52 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
       },
       {
         key: "summarize",
-        label: "Summarize thread",
-        icon: <ListChecks className="h-3.5 w-3.5" weight="duotone" />,
+        label: "Summarize for revision",
+        icon: <ClipboardText className="h-3.5 w-3.5" weight="duotone" />,
         run: () => {
-          if (onSummarizeRequested) {
-            onSummarizeRequested();
+          if (onSubmitMode) {
+            onSubmitMode(
+              input.trim() || "Summarize the key concepts we covered in this thread so far, in 3-4 sentences.",
+              "summarize"
+            );
             return;
           }
           insertAtCursor(
             "\nSummarize the key concepts we covered in this thread so far, in 3-4 sentences.\n"
+          );
+        },
+      },
+      {
+        key: "exam",
+        label: "Create exam-style tasks",
+        icon: <Notebook className="h-3.5 w-3.5" weight="duotone" />,
+        run: () => {
+          if (onSubmitMode) {
+            onSubmitMode(
+              input.trim() || "Create 4 exam-style tasks for this topic, with marking schemes.",
+              "exam"
+            );
+            return;
+          }
+          insertAtCursor(
+            "\nCreate 4 exam-style tasks for this topic, with marking schemes.\n"
+          );
+        },
+      },
+      {
+        key: "compare",
+        label: "Compare similar concepts",
+        icon: <Scales className="h-3.5 w-3.5" weight="duotone" />,
+        run: () => {
+          if (onSubmitMode) {
+            onSubmitMode(
+              input.trim() || "Compare this concept with a similar one — what are the key differences and when do I use each?",
+              "compare"
+            );
+            return;
+          }
+          insertAtCursor(
+            "\nCompare this concept with a similar one — what are the key differences and when do I use each?\n"
           );
         },
       },
@@ -417,7 +456,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
                     type="button"
                     onClick={onRegenerate}
                     disabled={!canRegenerate}
-                    className="inline-flex h-7 shrink-0 items-center rounded-md border border-border bg-background px-2.5 text-[11.5px] font-medium text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 shrink-0 items-center rounded-md border border-border bg-background px-2.5 text-[11.5px] font-medium text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Retry
                   </button>
@@ -479,6 +518,23 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(
                 placeholder={placeholder}
                 className="composer-textarea min-h-[2.25rem] w-full resize-none border-0 bg-transparent px-2 py-1.5 text-[14px] leading-[1.55] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
               />
+
+              {/* Keyboard shortcut hint — hidden on touch devices */}
+              <p className="hidden pt-1 text-[10.5px] text-muted-foreground/60 sm:block">
+                Press{" "}
+                <kbd className="rounded border border-border bg-surface px-1 py-px font-mono text-[10px]">
+                  /
+                </kbd>{" "}
+                to focus ·{" "}
+                <kbd className="rounded border border-border bg-surface px-1 py-px font-mono text-[10px]">
+                  Esc
+                </kbd>{" "}
+                to stop ·{" "}
+                <kbd className="rounded border border-border bg-surface px-1 py-px font-mono text-[10px]">
+                  ⌘↵
+                </kbd>{" "}
+                to send
+              </p>
             </div>
 
             <motion.button

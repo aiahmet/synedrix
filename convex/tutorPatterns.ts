@@ -137,11 +137,11 @@ export const detect = mutation({
     const user = await requireUser(ctx);
     const now = Date.now();
 
-    // 1. Load all mistake entries for this user.
+    // 1. Load up to 500 mistake entries for pattern detection.
     const allMistakes = await ctx.db
       .query("mistakeEntries")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+      .take(500);
 
     if (allMistakes.length < 3) return 0;
 

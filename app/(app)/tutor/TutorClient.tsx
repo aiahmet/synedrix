@@ -1,42 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useMutation, useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { extractText } from "@/lib/ai/uiMessage";
+import { useInlinePractice } from "@/lib/hooks/useInlinePractice";
+import { useStableMessages } from "@/lib/hooks/useStableMessages";
 import type { ChatGrounding } from "@/lib/ai/prompts/chat";
+import { useAutoRetry } from "@/lib/hooks/useAutoRetry";
 import { HistoryPanel } from "@/components/tutor/HistoryPanel";
 import { Composer } from "@/components/tutor/Composer";
 import { MessageList } from "@/components/tutor/MessageList";
 import { TutorTopBar } from "@/components/tutor/TutorTopBar";
 import { TutorDrawer } from "@/components/tutor/TutorDrawer";
+import { EmptyChatArea } from "@/components/tutor/EmptyChatArea";
 
-/**
- * TutorClient.
- *
- * The single client island on /tutor. Subscribes
- * to the Convex thread + messages + inline-
- * practice queries and composes:
- *
- *   - TutorTopBar (subject + history trigger)
- *   - chat column (empty space when no messages;
- *     MessageList when there is a thread)
- *   - sticky Composer at the bottom
- *   - HistoryDrawer (Threads) on the left
- *
- * On a fresh /tutor load, the only visible chrome
- * above the input is the top bar. The composer
- * input is the empty state. The chat itself is the
- * resume surface — there is no separate end-
- * session panel, no per-session mode indicator,
- * and no Memory drawer. History is the only drawer
- * the user can open from the top bar.
- */
 export function TutorClient(props: {
   readonly subjectId: Id<"subjects">;
   readonly topicId: Id<"topics"> | null;
@@ -76,12 +57,29 @@ export function TutorClient(props: {
   const isReady = Boolean(thread) && convexMessages !== undefined;
 
   if (!isReady) {
-    return <ShellSkeleton />;
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-background">
+        <TutorTopBar
+          subject={props.subject}
+          {...(props.topic ? { topic: props.topic } : {})}
+          {...(props.subject.color !== undefined
+            ? { subjectColor: props.subject.color }
+            : {})}
+          backHref={props.backHref}
+          onToggleHistory={() => setHistoryOpen(true)}
+          historyUnreadCount={0}
+        />
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 sm:px-6">
+          <EmptyChatArea state="loading" />
+        </main>
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-background/85 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:-mx-6 sm:px-6">
+          <div className="h-24 animate-pulse rounded-2xl bg-muted/20" />
+        </div>
+      </div>
+    );
   }
 
-  const conversationKey = `${props.subjectId}-${
-    props.topicId ?? "subject"
-  }${props.lessonContext ? "-lesson" : ""}`;
+  const conversationKey = `${props.subjectId}-${props.topicId ?? "subject"}${props.lessonContext ? "-lesson" : ""}`;
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-background">
@@ -105,6 +103,7 @@ export function TutorClient(props: {
         subject={props.subject}
         topic={props.topic}
         sessionId={props.sessionId}
+        convexMessages={convexMessages}
         initialMessages={(convexMessages ?? []).map(toUIMessage)}
         composerInitialText={props.composerInitialText}
         lessonContext={
@@ -169,7 +168,7 @@ function useEnsureThread(
 }
 
 function useMarkThreadReadOnFocus(threadId: Id<"tutorThreads"> | null) {
-  const markThreadRead = useMutation(api.tutor.markThreadRead);
+  const markThreadRead = useMutation(api.tutorComposer.markThreadRead);
   const lastIdRef = useRef<Id<"tutorThreads"> | null>(null);
   useEffect(() => {
     if (threadId === null) return;
@@ -199,6 +198,12 @@ function TutorChat(props: {
   };
   readonly topic: { readonly slug: string; readonly title: string } | null;
   readonly sessionId: string | null;
+  readonly convexMessages: ReadonlyArray<{
+    readonly id: Id<"tutorMessages">;
+    readonly role: "user" | "assistant";
+    readonly content: string;
+    readonly structuredContent?: string;
+  }>;
   readonly initialMessages: readonly UIMessage[];
   readonly composerInitialText: string | null;
   readonly lessonContext: ChatGrounding["lessonContext"] | undefined;
@@ -258,75 +263,44 @@ function TutorChat(props: {
     });
   }, [regenerate]);
 
-  const autoRetryAttemptedRef = useRef(false);
-  useEffect(() => {
-    if (status === "error" && !autoRetryAttemptedRef.current) {
-      autoRetryAttemptedRef.current = true;
-      wrappedRegenerate();
-    }
-    if (status === "ready") {
-      autoRetryAttemptedRef.current = false;
-    }
-  }, [status, wrappedRegenerate]);
+  useAutoRetry(status, wrappedRegenerate);
 
-  const inlinePracticeRequestingRef = useRef(false);
-  const [inlinePracticeRequestingLocal, setInlinePracticeRequestingLocal] =
-    useState(false);
-  const handleInlinePracticeRequested = useCallback(() => {
-    if (!props.topicId) return;
-    if (inlinePracticeRequestingRef.current) return;
-    const lastAssistant = [...messages]
-      .reverse()
-      .find((m) => m.role === "assistant");
-    if (!lastAssistant) return;
-    inlinePracticeRequestingRef.current = true;
-    setInlinePracticeRequestingLocal(true);
-    const recentTurns = messages.slice(-12).flatMap((m) => {
-      const text = extractText(m);
-      if (text.length === 0) return [];
-      const role = m.role === "user" ? ("user" as const) : ("assistant" as const);
-      return [{ role, text }];
-    });
-    fetch("/api/tutor/practice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        threadId: props.threadId as string,
-        subjectId: props.subjectId as string,
-        topicId: props.topicId as string,
-        topicTitle: props.topic?.title ?? "",
-        anchorMessageId: lastAssistant.id,
-        turns: recentTurns,
-        gradeLevel: null,
-        language: "en",
-      }),
-    })
-      .catch((err) => console.error("[tutor] inline-practice fetch failed", err))
-      .finally(() => {
-        inlinePracticeRequestingRef.current = false;
-        setInlinePracticeRequestingLocal(false);
-      });
-  }, [
-    messages,
+  const stableMessages = useStableMessages(props.convexMessages, messages);
+
+  const topicSuggestions = useQuery(
+    api.tutorSessions.getSubjectTopicsForEmptyState,
+    props.topicId ? "skip" : { subjectId: props.subjectId, limit: 6 }
+  );
+
+  const {
+    request: handleInlinePracticeRequested,
+    isRequesting: inlinePracticeRequestingLocal,
+  } = useInlinePractice(
+    props.threadId as string,
+    props.subjectId as string,
     props.topicId,
-    props.topic,
-    props.threadId,
-    props.subjectId,
-  ]);
+    props.topic?.title ?? "",
+    messages,
+  );
 
   const { setInput } = props;
-  const handleSummarizeRequested = useCallback(() => {
-    setInput(
-      "Summarize the key concepts we covered in this thread so far, in 3-4 sentences."
-    );
-  }, [setInput]);
 
   const onSubmit = (text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
     void sendMessage({ text: trimmed });
-    props.setInput("");
+    setInput("");
   };
+
+  const onSubmitMode = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed.length === 0) return;
+      void sendMessage({ text: trimmed });
+      setInput("");
+    },
+    [sendMessage, setInput],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -365,14 +339,14 @@ function TutorChat(props: {
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 sm:px-6">
-        {messages.length > 0 ? (
+        {stableMessages.length > 0 ? (
           <div className="flex-1 py-4">
             <MessageList
-              messages={messages}
+              messages={stableMessages}
               status={status}
               topicTitle={props.topic?.title ?? null}
               onRegenerate={
-                messages.some((m) => m.role === "assistant")
+                stableMessages.some((m) => m.role === "assistant")
                   ? wrappedRegenerate
                   : undefined
               }
@@ -387,7 +361,11 @@ function TutorChat(props: {
             />
           </div>
         ) : (
-          <div className="flex-1" />
+          <EmptyChatArea
+            state={props.topicId ? "new_thread" : "subject_only"}
+            topicSuggestions={topicSuggestions}
+            subject={props.subject}
+          />
         )}
         <div className="sticky bottom-0 z-20 -mx-4 border-t border-border bg-background/85 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:-mx-6 sm:px-6">
           <Composer
@@ -399,7 +377,7 @@ function TutorChat(props: {
             onStop={stop}
             error={error}
             onRegenerate={
-              messages.some((m) => m.role === "assistant")
+              stableMessages.some((m) => m.role === "assistant")
                 ? wrappedRegenerate
                 : undefined
             }
@@ -407,34 +385,15 @@ function TutorChat(props: {
               props.topicId ? handleInlinePracticeRequested : undefined
             }
             inlinePracticeRequesting={inlinePracticeRequestingLocal}
-            onSummarizeRequested={handleSummarizeRequested}
+            onSubmitMode={onSubmitMode}
             fallbackLessonHref={fallbackLessonHref}
             subject={props.subject}
             topic={props.topic}
-            hasMessages={messages.length > 0}
+            hasMessages={stableMessages.length > 0}
           />
         </div>
       </div>
     </main>
-  );
-}
-
-function ShellSkeleton() {
-  return (
-    <div className="flex min-h-[100dvh] flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center border-b border-border px-4">
-        <div className="h-6 w-16 animate-pulse rounded bg-muted/30" />
-      </header>
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-4 py-6">
-        <div className="h-7 w-3/4 animate-pulse rounded bg-muted/30" />
-        <div className="flex flex-col gap-2">
-          <div className="h-4 w-full animate-pulse rounded bg-muted/20" />
-          <div className="h-4 w-5/6 animate-pulse rounded bg-muted/20" />
-          <div className="h-4 w-4/6 animate-pulse rounded bg-muted/20" />
-        </div>
-        <div className="mt-auto h-24 animate-pulse rounded-2xl bg-muted/20" />
-      </main>
-    </div>
   );
 }
 

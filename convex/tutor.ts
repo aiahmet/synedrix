@@ -8,18 +8,6 @@ import {
   requireUser,
 } from "./users";
 import { buildProactiveOpening } from "./tutorOpening";
-import {
-  recommendNextBest,
-  type NextBestRecommendation,
-} from "./_lib/recommendNextBest";
-
-/**
- * Minimum session length, in seconds, for the mastery
- * bump in `endSession` to apply. Below this, the user almost
- * certainly opened the tab and closed it by accident; the
- * mastery curve is reserved for sessions, not opens.
- */
-const MIN_SESSION_SEC = 60;
 
 /**
  * Look up an existing thread for (userId, subjectId, topicId).
@@ -38,7 +26,7 @@ async function findThread(
     .withIndex("by_user_subject", (q) =>
       q.eq("userId", userId).eq("subjectId", subjectId)
     )
-    .collect();
+    .take(500);
   return (
     candidates.find(
       (t) => (t.topicId ?? undefined) === (topicId ?? undefined)
@@ -71,13 +59,22 @@ export const getThread = query({
     v.null()
   ),
   handler: async (ctx, { subjectId, topicId }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return null;
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getThread took ${ms}ms`);
+      return null;
+    }
 
     const match = await findThread(ctx, user._id, subjectId, topicId);
-    if (!match) return null;
+    if (!match) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getThread took ${ms}ms`);
+      return null;
+    }
 
-    return {
+    const result = {
       id: match._id,
       title: match.title ?? null,
       subjectId: match.subjectId ?? null,
@@ -85,6 +82,9 @@ export const getThread = query({
       createdAt: match._creationTime,
       lastReadAt: match.lastReadAt ?? null,
     };
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getThread took ${ms}ms`);
+    return result;
   },
 });
 
@@ -114,11 +114,20 @@ export const listMessages = query({
     })
   ),
   handler: async (ctx, { threadId, limit }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return [];
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] listMessages took ${ms}ms`);
+      return [];
+    }
 
     const thread = await ctx.db.get(threadId);
-    if (!thread || thread.userId !== user._id) return [];
+    if (!thread || thread.userId !== user._id) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] listMessages took ${ms}ms`);
+      return [];
+    }
 
     const effectiveLimit = Math.min(
       LIST_MESSAGES_MAX_LIMIT,
@@ -129,7 +138,7 @@ export const listMessages = query({
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
       .take(effectiveLimit);
 
-    return messages.map((m) => ({
+    const result = messages.map((m) => ({
       id: m._id,
       role: m.role,
       content: m.content,
@@ -138,6 +147,9 @@ export const listMessages = query({
         ? { structuredContent: m.structuredContent }
         : {}),
     }));
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] listMessages took ${ms}ms`);
+    return result;
   },
 });
 
@@ -158,18 +170,31 @@ export const getThreadHistory = query({
     })
   ),
   handler: async (ctx, { threadId }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return [];
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getThreadHistory took ${ms}ms`);
+      return [];
+    }
 
     const thread = await ctx.db.get(threadId);
-    if (!thread || thread.userId !== user._id) return [];
+    if (!thread || thread.userId !== user._id) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getThreadHistory took ${ms}ms`);
+      return [];
+    }
 
+    // Cap at 500 messages for thread history.
     const messages = await ctx.db
       .query("tutorMessages")
       .withIndex("by_thread", (q) => q.eq("threadId", threadId))
-      .collect();
+      .take(500);
 
-    return messages.map((m) => ({ role: m.role, content: m.content }));
+    const result = messages.map((m) => ({ role: m.role, content: m.content }));
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getThreadHistory took ${ms}ms`);
+    return result;
   },
 });
 
@@ -219,14 +244,27 @@ export const getContextForChat = query({
     v.null()
   ),
   handler: async (ctx, { threadId, subjectId, topicId }) => {
+    const start = Date.now();
     const user = await resolveUser(ctx);
-    if (!user) return null;
+    if (!user) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getContextForChat took ${ms}ms`);
+      return null;
+    }
 
     const thread = await ctx.db.get(threadId);
-    if (!thread || thread.userId !== user._id) return null;
+    if (!thread || thread.userId !== user._id) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getContextForChat took ${ms}ms`);
+      return null;
+    }
 
     const subject = await ctx.db.get(subjectId);
-    if (!subject) return null;
+    if (!subject) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] getContextForChat took ${ms}ms`);
+      return null;
+    }
 
     let topic:
       | {
@@ -270,12 +308,13 @@ export const getContextForChat = query({
         confidence = progress.confidence;
       }
 
+      // Cap at 500 mistakes for context.
       const topicMistakes = await ctx.db
         .query("mistakeEntries")
         .withIndex("by_user_topic", (q) =>
           q.eq("userId", user._id).eq("topicId", topicId)
         )
-        .collect();
+        .take(500);
       recentMistakes = topicMistakes
         .slice()
         .reverse()
@@ -288,13 +327,16 @@ export const getContextForChat = query({
         }));
     }
 
-    return {
+    const result = {
       subject: { title: subject.title, slug: subject.slug },
       topic,
       mastery,
       confidence,
       recentMistakes,
     };
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] getContextForChat took ${ms}ms`);
+    return result;
   },
 });
 
@@ -358,10 +400,15 @@ export const ensureThread = mutation({
     ctx,
     { subjectId, topicId, lessonContext }
   ): Promise<Id<"tutorThreads">> => {
+    const start = Date.now();
     const user = await requireUser(ctx);
 
     const existing = await findThread(ctx, user._id, subjectId, topicId);
-    if (existing) return existing._id;
+    if (existing) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] ensureThread took ${ms}ms`);
+      return existing._id;
+    }
 
     let title: string | undefined;
     if (topicId) {
@@ -409,13 +456,14 @@ export const ensureThread = mutation({
           )
           .first()
       : null;
+    // Cap at 500 mistakes for welcome-message context.
     const allTopicMistakes = topicId
       ? await ctx.db
           .query("mistakeEntries")
           .withIndex("by_user_topic", (q) =>
             q.eq("userId", user._id).eq("topicId", topicId)
           )
-          .collect()
+          .take(500)
       : [];
 
     // Phase 7 §9.1: derive tone context from the user's
@@ -543,6 +591,8 @@ export const ensureThread = mutation({
       content: welcome,
     });
 
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] ensureThread took ${ms}ms`);
     return threadId;
   },
 });
@@ -561,6 +611,7 @@ export const appendUserMessage = mutation({
   },
   returns: v.null(),
   handler: async (ctx, { threadId, content, clientId }): Promise<null> => {
+    const start = Date.now();
     const user = await requireUser(ctx);
     const thread = await ctx.db.get(threadId);
     if (!thread || thread.userId !== user._id) {
@@ -568,7 +619,11 @@ export const appendUserMessage = mutation({
     }
 
     const trimmed = content.trim();
-    if (trimmed.length === 0) return null;
+    if (trimmed.length === 0) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] appendUserMessage took ${ms}ms`);
+      return null;
+    }
 
     if (clientId) {
       const existing = await ctx.db
@@ -578,6 +633,8 @@ export const appendUserMessage = mutation({
         )
         .first();
       if (existing) {
+        const ms = Date.now() - start;
+        if (ms > 500) console.warn(`[tutor-telemetry] appendUserMessage took ${ms}ms`);
         return null;
       }
     }
@@ -590,8 +647,13 @@ export const appendUserMessage = mutation({
       ...(clientId ? { clientId } : {}),
     });
 
-    await ctx.db.patch(threadId, { lastMessageAt: now });
+    await ctx.db.patch(threadId, {
+      lastMessageAt: now,
+      lastMessagePreview: trimmed.slice(0, 200),
+    });
 
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] appendUserMessage took ${ms}ms`);
     return null;
   },
 });
@@ -614,6 +676,7 @@ export const recordAssistantMessage = mutation({
   },
   returns: v.null(),
   handler: async (ctx, { threadId, content, structuredContent }): Promise<null> => {
+    const start = Date.now();
     const user = await requireUser(ctx);
     const thread = await ctx.db.get(threadId);
     if (!thread || thread.userId !== user._id) {
@@ -621,7 +684,11 @@ export const recordAssistantMessage = mutation({
     }
 
     const trimmed = content.trim();
-    if (trimmed.length === 0) return null;
+    if (trimmed.length === 0) {
+      const ms = Date.now() - start;
+      if (ms > 500) console.warn(`[tutor-telemetry] recordAssistantMessage took ${ms}ms`);
+      return null;
+    }
 
     const now = Date.now();
     await ctx.db.insert("tutorMessages", {
@@ -635,6 +702,7 @@ export const recordAssistantMessage = mutation({
     await ctx.db.patch(threadId, {
       lastMessageAt: now,
       unreadCount: Math.min(999, previousUnread + 1),
+      lastMessagePreview: trimmed.slice(0, 200),
     });
 
     // Phase 6 §8.1: fire-and-forget auto-review scheduling.
@@ -660,428 +728,9 @@ export const recordAssistantMessage = mutation({
         )
       );
 
+    const ms = Date.now() - start;
+    if (ms > 500) console.warn(`[tutor-telemetry] recordAssistantMessage took ${ms}ms`);
     return null;
   },
 });
 
-/**
- * endSession.
- *
- * Atomically closes the study session, optionally stores a
- * reflection, and (if the session is topic-scoped and long
- * enough) blends a small mastery increment into the user's
- * topic-level progress. Idempotent.
- */
-export const endSession = mutation({
-  args: {
-    sessionId: v.id("studySessions"),
-    durationSec: v.number(),
-    reflection: v.optional(v.string()),
-  },
-  returns: v.union(
-    v.object({
-      masteryDelta: v.number(),
-      newMastery: v.number(),
-      newConfidence: v.number(),
-      durationSec: v.number(),
-      reflection: v.union(v.string(), v.null()),
-      hadReflectionBonus: v.boolean(),
-      nextBest: v.union(
-        v.object({
-          subject: v.object({
-            slug: v.string(),
-            title: v.string(),
-            color: v.optional(v.string()),
-          }),
-          chapter: v.object({ slug: v.string(), title: v.string() }),
-          topic: v.object({
-            id: v.id("topics"),
-            slug: v.string(),
-            title: v.string(),
-            examRelevance: v.number(),
-            mastery: v.number(),
-            source: v.union(v.literal("canonical"), v.literal("user")),
-            ownerId: v.union(v.id("users"), v.null()),
-          }),
-          reason: v.string(),
-        }),
-        v.null()
-      ),
-    }),
-    v.null()
-  ),
-  handler: async (
-    ctx,
-    { sessionId, durationSec, reflection }
-  ): Promise<{
-    masteryDelta: number;
-    newMastery: number;
-    newConfidence: number;
-    durationSec: number;
-    reflection: string | null;
-    hadReflectionBonus: boolean;
-    nextBest: NextBestRecommendation | null;
-  } | null> => {
-    const user = await requireUser(ctx);
-    const session = await ctx.db.get(sessionId);
-    if (!session) throw new Error("Session not found");
-    if (session.userId !== user._id) throw new Error("Forbidden");
-    if (session.completedAt !== undefined) return null;
-
-    const now = Date.now();
-    const actualDuration = Math.max(
-      0,
-      Math.min(Math.floor(durationSec), 24 * 60 * 60)
-    );
-
-    await ctx.db.patch(sessionId, {
-      durationSec: actualDuration,
-      completedAt: now,
-      ...(reflection !== undefined ? { reflection } : {}),
-    });
-
-    let masteryDelta = 0;
-    let newMastery = 0;
-    let newConfidence = 0;
-    let hadReflectionBonus = false;
-    if (session.topicId && actualDuration >= MIN_SESSION_SEC) {
-      const baseIncrement = 0.1;
-      const reflectionBonus =
-        reflection && reflection.trim().length > 0 ? 0.05 : 0;
-      const confidenceDelta = 0.05 + (reflectionBonus > 0 ? 0.05 : 0);
-      hadReflectionBonus = reflectionBonus > 0;
-      masteryDelta = baseIncrement + reflectionBonus;
-
-      const prior = await ctx.db
-        .query("userTopicProgress")
-        .withIndex("by_user_topic", (q) =>
-          q.eq("userId", user._id).eq("topicId", session.topicId!)
-        )
-        .first();
-
-      await ctx.runMutation(api.progress.upsertFromSession, {
-        userId: user._id,
-        topicId: session.topicId!,
-        masteryDelta,
-        confidenceDelta,
-        timeSpentSec: actualDuration,
-      });
-
-      const post = await ctx.db
-        .query("userTopicProgress")
-        .withIndex("by_user_topic", (q) =>
-          q.eq("userId", user._id).eq("topicId", session.topicId!)
-        )
-        .first();
-      newMastery = post?.mastery ?? (prior ? prior.mastery + masteryDelta : masteryDelta);
-      newConfidence = post?.confidence ?? 0;
-    } else if (session.topicId) {
-      const post = await ctx.db
-        .query("userTopicProgress")
-        .withIndex("by_user_topic", (q) =>
-          q.eq("userId", user._id).eq("topicId", session.topicId!)
-        )
-        .first();
-      newMastery = post?.mastery ?? 0;
-      newConfidence = post?.confidence ?? 0;
-    }
-
-    let nextBestSummary: NextBestRecommendation | null = null;
-    if (session.subjectId) {
-      nextBestSummary = await recommendNextBest(ctx, {
-        userId: user._id,
-        scope: { kind: "subject", subjectId: session.subjectId },
-        excludeTopicId: session.topicId,
-      });
-    }
-
-    // Phase 2 §4.2: trigger cross-topic mistake pattern
-    // detection after the session closes and mastery is
-    // updated. Fire-and-forget — the pattern detection
-    // runs asynchronously and does not block the session
-    // end response.
-    ctx.scheduler
-      .runAfter(0, api.tutorPatterns.detect, {})
-      .catch((err) =>
-        console.error("endSession: tutorPatterns.detect failed", err)
-      );
-
-    return {
-      masteryDelta,
-      newMastery,
-      newConfidence,
-      durationSec: actualDuration,
-      reflection: reflection ?? null,
-      hadReflectionBonus,
-      nextBest: nextBestSummary,
-    };
-  },
-});
-
-/**
- * getSubjectTopicsForEmptyState.
- */
-export const getSubjectTopicsForEmptyState = query({
-  args: {
-    subjectId: v.id("subjects"),
-    limit: v.optional(v.number()),
-  },
-  returns: v.union(
-    v.array(
-      v.object({
-        id: v.id("topics"),
-        slug: v.string(),
-        title: v.string(),
-        chapterSlug: v.string(),
-        chapterTitle: v.string(),
-        mastery: v.number(),
-        isStudied: v.boolean(),
-        examRelevance: v.number(),
-      })
-    ),
-    v.null()
-  ),
-  handler: async (ctx, { subjectId, limit }) => {
-    const cap = Math.max(1, Math.min(limit ?? 6, 20));
-    const subject = await ctx.db.get(subjectId);
-    if (!subject) return null;
-
-    const user = await resolveUser(ctx);
-    const userId: Id<"users"> | null = user ? user._id : null;
-
-    const chapters = await ctx.db
-      .query("chapters")
-      .withIndex("by_subject_order", (q) => q.eq("subjectId", subject._id))
-      .collect();
-    chapters.sort((a, b) => a.order - b.order);
-
-    const allTopics = (
-      await Promise.all(
-        chapters.map((ch) =>
-          ctx.db
-            .query("topics")
-            .withIndex("by_chapter", (q) => q.eq("chapterId", ch._id))
-            .collect()
-        )
-      )
-    ).flat();
-
-    if (allTopics.length === 0) return [];
-
-    const progressRows =
-      userId !== null
-        ? await ctx.db
-            .query("userTopicProgress")
-            .withIndex("by_user", (q) => q.eq("userId", userId))
-            .collect()
-        : [];
-    const progressByTopic = new Map<Id<"topics">, Doc<"userTopicProgress">>();
-    for (const p of progressRows) progressByTopic.set(p.topicId, p);
-
-    const rows = allTopics
-      .map((t) => {
-        const ch = chapters.find((c) => c._id === t.chapterId);
-        if (!ch) return null;
-        const p = progressByTopic.get(t._id);
-        return {
-          id: t._id,
-          slug: t.slug,
-          title: t.title,
-          chapterSlug: ch.slug,
-          chapterTitle: ch.title,
-          mastery: p ? p.mastery : 0,
-          isStudied: p !== null,
-          examRelevance: t.examRelevance,
-        };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-
-    rows.sort((a, b) => {
-      if (a.isStudied !== b.isStudied) return a.isStudied ? 1 : -1;
-      if (a.mastery !== b.mastery) return a.mastery - b.mastery;
-      return b.examRelevance - a.examRelevance;
-    });
-
-    return rows.slice(0, cap);
-  },
-});
-
-/**
- * getTutorUnreadTotal.
- */
-export const getTutorUnreadTotal = query({
-  args: {},
-  returns: v.number(),
-  handler: async (ctx) => {
-    const threads = await ctx.db.query("tutorThreads").collect();
-    let total = 0;
-    for (const t of threads) total += t.unreadCount ?? 0;
-    return Math.min(total, 999);
-  },
-});
-
-/**
- * listThreadsForSidebar.
- */
-export const listThreadsForSidebar = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      subject: v.object({
-        id: v.id("subjects"),
-        title: v.string(),
-        slug: v.string(),
-        color: v.union(v.string(), v.null()),
-      }),
-      threads: v.array(
-        v.object({
-          id: v.id("tutorThreads"),
-          title: v.union(v.string(), v.null()),
-          subjectId: v.union(v.id("subjects"), v.null()),
-          topicId: v.union(v.id("topics"), v.null()),
-          lastReadAt: v.union(v.number(), v.null()),
-          createdAt: v.number(),
-          lastMessageAt: v.union(v.number(), v.null()),
-          lastMessagePreview: v.union(v.string(), v.null()),
-          unreadCount: v.number(),
-        })
-      ),
-    })
-  ),
-  handler: async (ctx) => {
-    const user = await resolveUser(ctx);
-    if (!user) return [];
-
-    const threads = await ctx.db
-      .query("tutorThreads")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-
-    if (threads.length === 0) return [];
-
-    const subjectIds = Array.from(
-      new Set(
-        threads
-          .map((t) => t.subjectId)
-          .filter((id): id is Id<"subjects"> => id !== undefined)
-      )
-    );
-    const subjectRows = await Promise.all(
-      subjectIds.map((id) => ctx.db.get(id))
-    );
-    const subjectMap = new Map(
-      subjectRows
-        .filter((s): s is NonNullable<typeof s> => s !== null)
-        .map((s) => [s._id, s] as const)
-    );
-
-    const previewRows = await Promise.all(
-      threads.map((t) =>
-        ctx.db
-          .query("tutorMessages")
-          .withIndex("by_thread", (q) => q.eq("threadId", t._id))
-          .order("desc")
-          .first()
-      )
-    );
-    const previewByThread = new Map<
-      Id<"tutorThreads">,
-      { role: "user" | "assistant"; content: string; createdAt: number }
-    >();
-    threads.forEach((t, i) => {
-      const m = previewRows[i];
-      if (m) {
-        previewByThread.set(t._id, {
-          role: m.role,
-          content: m.content,
-          createdAt: m._creationTime,
-        });
-      }
-    });
-
-    const rows = threads.map((t) => {
-      const last = previewByThread.get(t._id) ?? null;
-      return {
-        id: t._id,
-        title: t.title ?? null,
-        subjectId: t.subjectId ?? null,
-        topicId: t.topicId ?? null,
-        lastReadAt: t.lastReadAt ?? null,
-        createdAt: t._creationTime,
-        lastMessageAt: t.lastMessageAt ?? (last?.createdAt ?? t._creationTime),
-        lastMessagePreview: last?.content ?? null,
-        unreadCount: t.unreadCount ?? 0,
-      };
-    });
-
-    type Group = {
-      subject: {
-        id: Id<"subjects">;
-        title: string;
-        slug: string;
-        color: string | null;
-      };
-      threads: typeof rows;
-    };
-    const grouped = new Map<Id<"subjects">, Group>();
-    for (const row of rows) {
-      if (!row.subjectId) continue;
-      const subj = subjectMap.get(row.subjectId);
-      if (!subj) continue;
-      const existing = grouped.get(row.subjectId);
-      if (existing) {
-        existing.threads.push(row);
-      } else {
-        grouped.set(row.subjectId, {
-          subject: {
-            id: subj._id,
-            title: subj.title,
-            slug: subj.slug,
-            color: subj.color ?? null,
-          },
-          threads: [row],
-        });
-      }
-    }
-
-    const groups = Array.from(grouped.values()).map((g) => ({
-      subject: g.subject,
-      threads: g.threads.sort(
-        (a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0)
-      ),
-    }));
-    groups.sort((a, b) => {
-      const aMax = Math.max(
-        ...a.threads.map((t) => t.lastMessageAt ?? t.createdAt)
-      );
-      const bMax = Math.max(
-        ...b.threads.map((t) => t.lastMessageAt ?? t.createdAt)
-      );
-      return bMax - aMax;
-    });
-
-    return groups;
-  },
-});
-
-/**
- * markThreadRead.
- */
-export const markThreadRead = mutation({
-  args: {
-    threadId: v.id("tutorThreads"),
-  },
-  returns: v.null(),
-  handler: async (ctx, { threadId }): Promise<null> => {
-    const user = await requireUser(ctx);
-    const thread = await ctx.db.get(threadId);
-    if (!thread || thread.userId !== user._id) {
-      throw new Error("Forbidden");
-    }
-    await ctx.db.patch(threadId, {
-      lastReadAt: Date.now(),
-      unreadCount: 0,
-    });
-    return null;
-  },
-});

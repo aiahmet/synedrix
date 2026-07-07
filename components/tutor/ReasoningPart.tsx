@@ -45,7 +45,7 @@ export function ReasoningPart({
         className={cn(
           "my-2 overflow-hidden rounded-lg border",
           "border-accent-border/50 bg-accent-subtle/40",
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+          "shadow-[inset_0_1px_0_color-mix(in_oklch,var(--foreground)_10%,transparent)]",
           "transition-colors duration-200"
         )}
       >

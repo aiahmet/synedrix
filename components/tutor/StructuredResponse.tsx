@@ -33,7 +33,13 @@
  */
 
 import { useMemo } from "react";
-import { Sparkle, Lightbulb } from "@phosphor-icons/react/dist/ssr";
+import {
+  Sparkle,
+  Lightbulb,
+  ClipboardText,
+  ArrowsLeftRight,
+  Notepad,
+} from "@phosphor-icons/react/dist/ssr";
 
 import { AIMarkdown } from "@/lib/content/aiMarkdown";
 import { parseBlockMarker, BlockWidget } from "@/lib/content/tutorWidgets";
@@ -48,6 +54,7 @@ export interface StructuredContent {
   readonly nextSuggestion: string;
   readonly nextActionPrompt: string;
   readonly affirmation?: string;
+  readonly mode?: string;
   readonly _rawText: string;
   readonly _hasCheck: boolean;
   readonly _hasVisual: boolean;
@@ -106,6 +113,86 @@ export function StructuredResponse({
         content={rawText}
         density="compact"
       />
+    );
+  }
+
+  // ── Mode-specific rendering paths ──────────────────────
+  const mode = structured.mode as "exam" | "compare" | "summarize" | undefined;
+
+  if (mode === "exam") {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 rounded-lg border border-accent-border/30 bg-accent-subtle/10 px-3 py-2">
+          <ClipboardText className="h-4 w-4 text-accent" weight="duotone" />
+          <span className="text-[13px] font-medium text-foreground">Practice Exam</span>
+        </div>
+        <div className="prose-sm max-w-none text-[13px] leading-relaxed text-foreground/85">
+          <AIMarkdown
+            id={`${messageId}-exam`}
+            content={structured.explanation}
+            density="compact"
+          />
+        </div>
+        {structured.keyInsight && (
+          <div className="rounded-lg border border-border bg-surface p-3">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tips</span>
+            <p className="mt-1 text-[12.5px] text-foreground/80">{structured.keyInsight}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (mode === "compare") {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 rounded-lg border border-accent-border/30 bg-accent-subtle/10 px-3 py-2">
+          <ArrowsLeftRight className="h-4 w-4 text-accent" weight="duotone" />
+          <span className="text-[13px] font-medium text-foreground">Comparison</span>
+        </div>
+        <div className="prose-sm max-w-none text-[13px] leading-relaxed text-foreground/85">
+          <AIMarkdown
+            id={`${messageId}-compare`}
+            content={structured.explanation}
+            density="compact"
+          />
+        </div>
+        {structured.keyInsight && (
+          <div className="rounded-lg border border-border bg-surface p-3">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Decision Guide</span>
+            <p className="mt-1 text-[12.5px] text-foreground/80">{structured.keyInsight}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (mode === "summarize") {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 rounded-lg border border-accent-border/30 bg-accent-subtle/10 px-3 py-2">
+          <Notepad className="h-4 w-4 text-accent" weight="duotone" />
+          <span className="text-[13px] font-medium text-foreground">Revision Notes</span>
+        </div>
+        <div className="prose-sm max-w-none text-[13px] leading-relaxed text-foreground/85">
+          <AIMarkdown
+            id={`${messageId}-summarize`}
+            content={structured.explanation}
+            density="compact"
+          />
+        </div>
+        {structured.keyInsight && (
+          <div className="rounded-lg border-l-2 border-accent bg-surface pl-3 py-2">
+            <p className="text-[12.5px] text-foreground/80 italic">{structured.keyInsight}</p>
+          </div>
+        )}
+        {structured.affirmation && (
+          <div className="rounded-lg border border-border bg-surface p-3">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Key Takeaway</span>
+            <p className="mt-1 text-[12.5px] text-foreground/80">{structured.affirmation}</p>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -251,7 +338,7 @@ function KeyInsightSection({
         className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent"
         weight="fill"
       />
-      <p className="text-[12.5px] font-medium leading-relaxed text-foreground">
+      <p className="break-words text-[12.5px] font-medium leading-relaxed text-foreground">
         {insight}
       </p>
     </div>
@@ -352,7 +439,7 @@ function AffirmationSection({
         className="mt-0.5 h-3 w-3 shrink-0 text-accent/70"
         weight="fill"
       />
-      <p className="text-[11.5px] leading-relaxed text-foreground/70">
+      <p className="break-words text-[11.5px] leading-relaxed text-foreground/70">
         {text}
       </p>
     </div>
@@ -448,6 +535,7 @@ export function tryParseStructured(
         affirmation: parsed.affirmation
           ? String(parsed.affirmation)
           : undefined,
+        mode: parsed.mode ? String(parsed.mode) : undefined,
         _rawText: String(parsed._rawText ?? input),
         _hasCheck: Boolean(parsed._hasCheck),
         _hasVisual: Boolean(parsed._hasVisual),

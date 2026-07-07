@@ -286,7 +286,7 @@ function MessageBubble({
       <div className="min-w-0">
         {isUser ? (
           <div className="rounded-2xl rounded-br-md bg-foreground/10 px-4 py-2.5 text-foreground">
-            <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
+            <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed">
               {userText.length > 0 ? userText : ""}
             </p>
           </div>

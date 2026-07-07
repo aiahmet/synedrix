@@ -458,7 +458,7 @@ function ActionButton({
       aria-label={label}
       title={label}
       className={cn(
-        "group/btn inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground focus-visible:bg-surface-elevated focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40 disabled:cursor-not-allowed disabled:opacity-40",
+        "group/btn inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground focus-visible:bg-surface-elevated focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40 disabled:cursor-not-allowed disabled:opacity-40",
         className
       )}
     >
