@@ -1,27 +1,5 @@
 import { z } from "zod";
-
-/**
- * lesson.ts.
- *
- * Schema + prompt builder for the AI-generated whole-topic
- * text (`generateCourseLesson` task). Used by both the
- * streaming route handler `/api/topics/lesson/stream` and
- * `regenerateTopicLesson` in `convex/topics.ts`.
- *
- * The lesson text is large (1–3k words). It is streamed
- * live to the client via Vercel AI SDK's `streamObject`
- * with the schema below as the validation surface —
- * AGENTS.md requires `streamObject` + Zod for structured
- * streaming output.
- *
- * Output shape:
- *  - `sections`:    3–12 `(heading, body)` pairs, in render order.
- *  - `glossary`:    up to 30 short `(term, definition)` pairs.
- * `body` is capped to 4000 chars (~one substantial
- * paragraph) so a section does not balloon into a
- * chapter. Total word count is computed from the
- * joined content when the lesson row is written.
- */
+import { getSubjectBehavior } from "@/lib/ai/subjectBehaviors";
 
 export const lessonSectionSchema = z.object({
   heading: z.string().min(1).max(80),
@@ -33,26 +11,11 @@ export const lessonGlossaryEntrySchema = z.object({
   definition: z.string().min(5).max(300),
 });
 
-/**
- * Top-level schema for the AI-generated lesson object.
- *
- * Declared `.strict()` so unknown fields from the LLM
- * response FAIL THE validate step rather than silently
- * passing through to downstream renderers. The two
- * downstream consumers (`TopicWorkedExamples` and the
- * `VocabularyDeck` renderer in
- * `components/dashboard/`) both index by `sections` and
- * `glossary` only — a phantom extra `{"key_points":
- * "..."}` field from a model drift would be invisible in
- * tests but would inflate every lesson's serialized
- * size in Convex storage.
- */
 export const lessonSchema = z.object({
   sections: z.array(lessonSectionSchema).min(3).max(12),
   glossary: z.array(lessonGlossaryEntrySchema).max(30),
 }).strict();
 
-/** Inferred type — the shape `streamObject` validates against. */
 export type LessonShape = z.infer<typeof lessonSchema>;
 
 export type LessonDepth = "simple" | "standard" | "rigorous";
@@ -61,21 +24,14 @@ export interface CourseLessonPromptInput {
   readonly subjectTitle: string;
   readonly subjectSlug: string;
   readonly topicTitle: string;
-  /** Short free-text description the student typed into the form. */
   readonly brief: string;
   readonly objectives: readonly string[];
   readonly gradeLevel: string | null;
   readonly difficulty: "EASY" | "MEDIUM" | "HARD";
   readonly depth: LessonDepth;
-  /** Always "de" for the German-Gymnasium target user. */
   readonly language: string;
 }
 
-/**
- * Single system-prompt builder. The route handler and the
- * Convex mutation both call this so the prompt text is
- * canonical. Adding depth-related phrasing? One edit point.
- */
 export function buildCourseLessonPrompt(g: CourseLessonPromptInput): string {
   const objectivesBlock =
     g.objectives.length > 0
@@ -91,7 +47,7 @@ export function buildCourseLessonPrompt(g: CourseLessonPromptInput): string {
 
   return `You are the Synedrix course lesson generator. The student is a German Gymnasium pupil ("${g.gradeLevel ?? "Grade level unspecified"}"), working language ${g.language}, working on subject "${g.subjectTitle}".
 
-Topic: ${g.topicTitle}
+${g.subjectSlug ? `Subject-specific lesson structure: ${getSubjectBehavior(g.subjectSlug).lessonStructure}\n\n` : ""}Topic: ${g.topicTitle}
 Difficulty: ${g.difficulty}
 Requested depth: ${g.depth}
 

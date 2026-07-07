@@ -1,22 +1,6 @@
 import { z } from "zod";
+import { getSubjectBehavior } from "@/lib/ai/subjectBehaviors";
 
-/**
- * practice.ts.
- *
- * Schema + prompt builder for the AI-generated
- * text-only practice items derived from a lesson
- * (`generatePracticeFromLesson` task). Consumed by
- * `startLessonPractice` in `convex/practice.ts`.
- *
- * The output is small (3–8 items) and atomic. Per plan
- * decision D9, we use `generateObject` (not streaming)
- * so the entire validation surface succeeds or fails
- * together — no half-delivered practice sets.
- *
- * Each item is an open-prose prompt with a model-
- * authored expected answer, a skill tag, and a 1–4
- * bullet rubric the grader consumes downstream.
- */
 
 export const practiceItemSchema = z.object({
   prompt: z.string().min(10).max(400),
@@ -25,21 +9,6 @@ export const practiceItemSchema = z.object({
   rubric: z.array(z.string().min(2).max(120)).min(1).max(4),
 });
 
-/**
- * Top-level schema for the AI-generated practice bundle.
- *
- * `.strict()` rejects unknown LLM-emitted keys so a
- * future model with a new field — say `{"difficulty":
- * "HARD"}` — fails validation cleanly instead of being
- * silently dropped on the way to `startLessonPractice`.
- * The downstream `startLessonPractice` mutation reads
- * ONLY `items`, so any extra field would be silent
- * storage bloat at minimum and a schema drift
- * fingerprint at worst. Transitioning to `.passthrough()`
- * here is the right move only when the consumer
- * contract is finalized; until then `.strict()` is the
- * safer default.
- */
 export const practiceItemsSchema = z.object({
   items: z.array(practiceItemSchema).min(3).max(8),
 }).strict();
@@ -47,27 +16,18 @@ export const practiceItemsSchema = z.object({
 export type PracticeItemsShape = z.infer<typeof practiceItemsSchema>;
 
 export interface PracticeFromLessonPromptInput {
-  /** Joined sections — what the student just read. */
   readonly lessonContent: string;
-  /** Per-section headings + bodies. Used to keep prompts anchored. */
   readonly lessonSections: ReadonlyArray<{
     readonly heading: string;
     readonly body: string;
   }>;
   readonly topicTitle: string;
-  /** Item count requested by the student (capped 3–8). */
+  readonly subjectSlug?: string;
   readonly count: number;
   readonly gradeLevel: string | null;
   readonly language: string;
 }
 
-/**
- * Prompt builder. We pass the full lesson content plus
- * the per-section view so the model can quote sections
- * directly into prompts ("Explain the role of X as
- * described in `Section 2`…"), which makes grading
- * more reliable downstream.
- */
 export function buildPracticeFromLessonPrompt(
   g: PracticeFromLessonPromptInput
 ): string {
@@ -75,11 +35,6 @@ export function buildPracticeFromLessonPrompt(
     .map((s, i) => `Section ${i + 1} — "${s.heading}"\n${s.body}`)
     .join("\n\n");
 
-  // Cap what we send in. A 5k-word lesson does not need
-  // every section in the prompt; the model overgenerates
-  // when fed too much. We send the full joined text up to
-  // a hard ceiling and prefer the structured per-section
-  // view when shorter.
   const HARD_CAP = 12_000;
   const trimmed =
     g.lessonContent.length > HARD_CAP
@@ -88,7 +43,7 @@ export function buildPracticeFromLessonPrompt(
 
   return `You are the Synedrix practice generator. The student is a ${g.gradeLevel ?? "Gymnasium"}-grade student working in ${g.language}. They just read a lesson on "${g.topicTitle}" and need ${g.count} open-prose practice questions that test understanding at the same depth the lesson was written.
 
-Lesson content:
+${g.subjectSlug ? `Subject-specific guidance: ${getSubjectBehavior(g.subjectSlug).gradingEmphasis}\n` : ""}Lesson content:
 """
 ${trimmed}
 """
@@ -106,6 +61,71 @@ Output rules:
     - \`rubric\`: 1–4 bullets (2–120 chars each). Each bullet is a check the grader uses — "states that perspective shifts in line X", "uses the German subjunctive trigger bien que".
 - Mix skills across items. Do not stack 4 items on the same skill.
 - Do not include the lesson titles verbatim as prompts. The student should have to apply the lesson, not copy it.
+- Return only the structured object, no preamble.
+`;
+}
+
+export interface ConversationTurn {
+  readonly role: "user" | "assistant";
+  readonly text: string;
+}
+
+export interface PracticeFromConversationPromptInput {
+  readonly turns: ReadonlyArray<ConversationTurn>;
+  readonly topicTitle: string;
+  readonly gradeLevel: string | null;
+  readonly language: string;
+  readonly count: number;
+  readonly subjectSlug?: string;
+}
+
+function truncateSubjectInstruction(instruction: string, maxLen: number): string {
+  if (instruction.length <= maxLen) return instruction;
+  const truncated = instruction.slice(0, maxLen);
+  const lastNewline = truncated.lastIndexOf("\n");
+  if (lastNewline > maxLen * 0.5) return truncated.slice(0, lastNewline);
+  return truncated + "…";
+}
+
+export function buildPracticeFromConversationPrompt(
+  g: PracticeFromConversationPromptInput
+): string {
+  const PER_TURN_CAP = 1_500;
+  const transcript = g.turns
+    .map((t) => {
+      const speaker = t.role === "user" ? "Student" : "Tutor";
+      const text =
+        t.text.length > PER_TURN_CAP
+          ? `${t.text.slice(0, PER_TURN_CAP)}\n[…truncated…]`
+          : t.text;
+      return `${speaker}: ${text}`;
+    })
+    .join("\n\n");
+
+  const subjectGuidance =
+    g.subjectSlug
+      ? `\nSubject-specific guidance for practice generation: ${truncateSubjectInstruction(getSubjectBehavior(g.subjectSlug).tutorInstructions, 800)}\n`
+      : "";
+
+  return `You are the Synedrix practice generator. The student is a ${g.gradeLevel ?? "Gymnasium"}-grade student working in ${g.language}. They have been studying "${g.topicTitle}" with the tutor in a live chat session and now need ${g.count} practice questions to test what they just learned. The questions must be derived from the conversation, not from invented material.${subjectGuidance}
+
+Conversation transcript (most recent turns):
+"""
+${transcript}
+"""
+
+Output rules:
+- Return ONE structured object: \`{ items: [...] }\`.
+- ${g.count} items. Stay between 3 and 8.
+- Each item has:
+    - \`prompt\`: 10–400 chars. Open-prose question that elicits a written answer. Reference a specific claim or formula from the conversation when relevant — do not invent context the student never saw.
+    - \`expectedAnswer\`: 10–800 chars. What a strong answer says. Grounded in what the tutor actually said in the transcript, not invented.
+    - \`skill\`: 1–40 chars. The skill the question tests (e.g. "Sign-error detection", "Potenzregel anwenden").
+    - \`rubric\`: 1–4 bullets (2–120 chars each). Each bullet is a check the grader uses — "names the rule", "applies it to the example without a sign error".
+- Mix skills across items. Do not stack 4 items on the same skill.
+- Do not include the tutor's exact wording verbatim in the prompts — the student should have to apply what they heard, not copy it.
+
+Thin transcript fallback: if the transcript is too short or too thin to ground ${g.count} unique, non-invented questions (e.g. fewer than 2 distinct turns OR fewer than 200 chars of assistant content), do NOT pad with invented material. Return the best grounded subset you can produce AND the route handler will treat Zod rejection as a 502 so the system knows the LLM refused rather than hallucinated.
 - Return only the structured object, no preamble.
 `;
 }

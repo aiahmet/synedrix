@@ -1,22 +1,5 @@
 import { z } from "zod";
-
-/**
- * grading.ts.
- *
- * Schema + prompt builder for the per-answer grader
- * (`gradeAnswer` task). Consumed by
- * `submitAnswerAndGrade` in `convex/practice.ts`.
- *
- * Output is small (one verdict + score + feedback +
- * better answer). Per plan decision D10 the call is
- * atomic — `generateObject`, not streaming. Latency
- * should be sub-3 s; a streaming UI here adds no value.
- *
- * The `mistakeType` union mirrors the
- * `mistakeEntries.mistakeType` union in convex/schema.ts
- * verbatim so we can write a MistakeEntry without an
- * enum cast downstream.
- */
+import { getSubjectBehavior } from "@/lib/ai/subjectBehaviors";
 
 export const mistakeTypeSchema = z.union([
   z.literal("CONCEPT_MISUNDERSTANDING"),
@@ -25,6 +8,12 @@ export const mistakeTypeSchema = z.union([
   z.literal("FORMULA_RECALL_FAILURE"),
   z.literal("MISREAD_QUESTION"),
   z.literal("LANGUAGE_EXPRESSION_ISSUE"),
+  z.literal("SIGN_ERROR"),
+  z.literal("UNIT_CONVERSION_ERROR"),
+  z.literal("GRAMMAR_ERROR"),
+  z.literal("VOCABULARY_ERROR"),
+  z.literal("REACTION_BALANCE_ERROR"),
+  z.literal("ARGUMENT_STRUCTURE_ISSUE"),
 ]);
 
 export const gradingSchema = z.object({
@@ -33,55 +22,25 @@ export const gradingSchema = z.object({
     z.literal("partially_correct"),
     z.literal("incorrect"),
   ]),
-  // 0..1 — used by `finishLessonPractice` to aggregate the
-  // run-level score and German 1–6 letter grade.
   score: z.number().min(0).max(1),
-  // Shown verbatim to the student on the results page.
   feedback: z.string().min(5).max(800),
-  // Model-authored "what a strong answer would say".
-  // Persisted on the practiceAttempt row so the results
-  // page and the tutor-page context can re-use it without
-  // re-prompting the grader.
   betterAnswer: z.string().min(10).max(800),
-  // `null` when verdict === "correct" — a correct answer
-  // is not a mistake entry.
   mistakeType: mistakeTypeSchema.nullable(),
-  // `null` when verdict === "correct".
   cause: z.string().min(5).max(400).nullable(),
 }).strict();
 
 export type GradingShape = z.infer<typeof gradingSchema>;
 
 export interface GradingPromptInput {
-  /**
-   * The lesson excerpt that grounds the question. Pulled
-   * server-side via the section index `practiceItems.rubric`
-   * does not (yet) carry; this is the section the
-   * practice-item's prompt referred to.
-   */
   readonly lessonExcerpt: string;
   readonly prompt: string;
   readonly expectedAnswer: string;
   readonly rubric: readonly string[];
   readonly userAnswer: string;
   readonly language: string;
+  readonly subjectSlug?: string;
 }
 
-/**
- * Rubric bullets are formatted one per line so the model
- * can quote them back in `feedback`. Empty rubric arrays
- * fall back to a single "(no rubric specified)" line so
- * the prompt shape stays well-formed.
- *
- * Light formatting (bold/italic/inline-code and LaTeX
- * math via \(...\) and \[...\]) is allowed inside
- * `feedback` and `betterAnswer` — the consumer surfaces
- * (practice page, results page) feed those strings
- * through `AIMarkdown`. Single `$` is NEVER math; if
- * the model would write a price it should write it
- * verbatim so the parser does not mistake it for
- * inline math.
- */
 export function buildGradingPrompt(g: GradingPromptInput): string {
   const rubricBlock =
     g.rubric.length > 0
@@ -95,7 +54,7 @@ export function buildGradingPrompt(g: GradingPromptInput): string {
 
   return `You are the Synedrix grader. The student is a Gymnasium-age pupil working in ${g.language}. Grade ONE answer against the rubric below.
 
-Lesson excerpt that grounds the question:
+${g.subjectSlug ? `Subject-specific grading rules: ${getSubjectBehavior(g.subjectSlug).gradingEmphasis}\n\n` : ""}Lesson excerpt that grounds the question:
 """
 ${excerpt}
 """
@@ -126,19 +85,6 @@ Output rules:
 `;
 }
 
-/**
- * German Gymnasium letter-grade boundaries per plan decision
- * D11 and §11 of the lesson plan. Centralized here so the
- * grade computation in `convex/practice.ts:finishLessonPractice`
- * has one source of truth.
- *
- * 1 = sehr gut      ≥ 92 %
- * 2 = gut           ≥ 81 %
- * 3 = befriedigend  ≥ 67 %
- * 4 = ausreichend   ≥ 50 %
- * 5 = mangelhaft    ≥ 30 %
- * 6 = ungenügend    <  30 %
- */
 export type GermanLetterGrade = "1" | "2" | "3" | "4" | "5" | "6";
 
 export const GERMAN_GRADE_LABELS: Record<
@@ -153,13 +99,6 @@ export const GERMAN_GRADE_LABELS: Record<
   "6": { label: "ungenügend", minPct: 0 },
 };
 
-/**
- * Map a per-run mean score in [0,1] to the German 1–6
- * letter grade. Returns the lowest "1..6" whose
- * threshold the score clears. Score < 0.30 is a 6.
- * `computeRunScore` in convex/practice.ts (and the
- * unit test) call this.
- */
 export function scoreToGermanGrade(score: number): GermanLetterGrade {
   if (!Number.isFinite(score)) return "6";
   const pct = Math.max(0, Math.min(1, score)) * 100;

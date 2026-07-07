@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPracticeFromLessonPrompt,
+  buildPracticeFromConversationPrompt,
   practiceItemsSchema,
   type PracticeItemsShape,
 } from "@/lib/ai/prompts/practice";
@@ -125,6 +126,65 @@ describe("practiceItemsSchema", () => {
     };
     expect(() => practiceItemsSchema.parse(zero)).toThrow();
   });
+
+describe("buildPracticeFromConversationPrompt", () => {
+  const baseConvInput = {
+    turns: [
+      { role: "user" as const, text: "What is a logarithm?" },
+      { role: "assistant" as const, text: "A logarithm asks for the exponent y such that b^y = x. For example, log_2(8) = 3 because 2^3 = 8." },
+      { role: "user" as const, text: "Can you give me a practice problem?" },
+    ],
+    topicTitle: "Logarithms",
+    gradeLevel: "11",
+    language: "de",
+    count: 3,
+  };
+
+  it("includes topic title and count", () => {
+    const p = buildPracticeFromConversationPrompt(baseConvInput);
+    expect(p).toContain("Logarithms");
+    expect(p).toContain("3");
+  });
+
+  it("does NOT include subject-specific guidance when subjectSlug is undefined", () => {
+    const p = buildPracticeFromConversationPrompt({
+      ...baseConvInput,
+      subjectSlug: undefined,
+    });
+    expect(p).not.toContain("Subject-specific guidance for practice generation");
+  });
+
+  it("includes Mathematics-specific teaching rules when subjectSlug is math", () => {
+    const p = buildPracticeFromConversationPrompt({
+      ...baseConvInput,
+      subjectSlug: "math",
+    });
+    expect(p).toContain("Subject-specific guidance for practice generation");
+    expect(p).toContain("Mathematics-specific teaching rules");
+  });
+
+  it("includes Language-specific teaching rules when subjectSlug is english", () => {
+    const p = buildPracticeFromConversationPrompt({
+      ...baseConvInput,
+      subjectSlug: "english",
+    });
+    expect(p).toContain("Subject-specific guidance for practice generation");
+    expect(p).toContain("Language-specific teaching rules");
+  });
+
+  it("includes student and tutor turns in the prompt", () => {
+    const p = buildPracticeFromConversationPrompt(baseConvInput);
+    expect(p).toContain("Student:");
+    expect(p).toContain("Tutor:");
+    expect(p).toContain("What is a logarithm?");
+    expect(p).toContain("log_2(8) = 3");
+  });
+
+  it("includes the language", () => {
+    const p = buildPracticeFromConversationPrompt(baseConvInput);
+    expect(p).toContain("de");
+  });
+});
 
   it("rejects a rubric with five bullets", () => {
     const five = {

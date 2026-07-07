@@ -81,6 +81,30 @@ describe("buildCourseLessonPrompt", () => {
     const p = buildCourseLessonPrompt({ ...baseInput, objectives: [] });
     expect(p).toContain("derive from the brief below");
   });
+
+  it("injects mathematics lessonStructure for math subjectSlug", () => {
+    const p = buildCourseLessonPrompt({ ...baseInput, subjectSlug: "math" });
+    expect(p).toContain("MATHEMATICS LESSON STRUCTURE");
+    expect(p).toContain("worked example");
+    expect(p).toContain("self-check");
+  });
+
+  it("injects physics lessonStructure for physics subjectSlug", () => {
+    const p = buildCourseLessonPrompt({ ...baseInput, subjectSlug: "physics" });
+    expect(p).toContain("PHYSICS LESSON STRUCTURE");
+    expect(p).toContain("common pitfalls");
+  });
+
+  it("injects language lessonStructure for english subjectSlug", () => {
+    const p = buildCourseLessonPrompt({ ...baseInput, subjectSlug: "english" });
+    expect(p).toContain("LANGUAGE LESSON STRUCTURE");
+    expect(p).toContain("communicative goal");
+  });
+
+  it("omits lesson structure line when subjectSlug is empty string", () => {
+    const p = buildCourseLessonPrompt({ ...baseInput, subjectSlug: "" });
+    expect(p).not.toContain("LESSON STRUCTURE");
+  });
 });
 
 describe("lessonSchema", () => {
