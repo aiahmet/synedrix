@@ -36,54 +36,54 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: "Synedrix — The Personal Learning Operating System",
+    default: "Synedrix — Das persönliche Lern-Betriebssystem",
     template: "%s | Synedrix",
   },
   description:
-    "Synedrix unifies the curriculum map, knowledge workspace, AI tutor, practice engine, and spaced repetition into one state-driven loop. Built for German Gymnasium students and the open-source community.",
+    "Synedrix vereint Lehrplan, Wissensdatenbank, KI-Tutor, Practice Engine und Spaced Repetition in einem einzigen Lernkreislauf. Entwickelt für deutsche Gymnasiasten und die Open-Source-Community.",
   keywords: [
     "Synedrix",
-    "AI tutor",
-    "spaced repetition",
-    "study app",
-    "German Gymnasium",
+    "KI-Tutor",
+    "Spaced Repetition",
+    "Lern-App",
+    "Gymnasium",
+    "Abitur",
     "Oberstufe",
-    "learning platform",
-    "AI education",
-    "Next.js study app",
-    "practice generation",
-    "curriculum mapping",
-    "mistake journal",
-    "flashcard app",
+    "Lernplattform",
+    "KI-Bildung",
+    "Übungen generieren",
+    "Lehrplan-Mapping",
+    "Fehlerjournal",
+    "Karteikarten-App",
     "Convex",
-    "DeepSeek",
-    "open source study app",
+    "Next.js",
+    "Open-Source",
   ],
   authors: [{ name: "Ahmet Cetin" }],
   creator: "Ahmet Cetin",
   publisher: "Synedrix",
   openGraph: {
     type: "website",
-    locale: "en_US",
+    locale: "de_DE",
     siteName: "Synedrix",
-    title: "Synedrix — The Personal Learning Operating System",
+    title: "Synedrix — Das persönliche Lern-Betriebssystem",
     description:
-      "Five systems, one state. From 'I don't get this' to 'I can solve this alone.'",
+      "Fünf Systeme, ein Zustand. Vom 'Ich verstehe das nicht' zum 'Ich kann das alleine lösen.'",
     url: BASE_URL,
     images: [
       {
         url: "/synedrix-github-banner.png",
         width: 1200,
         height: 630,
-        alt: "Synedrix — the personal learning operating system",
+        alt: "Synedrix — Das persönliche Lern-Betriebssystem",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Synedrix — The Personal Learning Operating System",
+    title: "Synedrix — Das persönliche Lern-Betriebssystem",
     description:
-      "Five systems, one state. From 'I don't get this' to 'I can solve this alone.'",
+      "Fünf Systeme, ein Zustand. Vom 'Ich verstehe das nicht' zum 'Ich kann das alleine lösen.'",
     images: ["/synedrix-github-banner.png"],
     creator: "@aiahmet",
   },
@@ -113,7 +113,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html
-        lang="en"
+        lang="de"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
         suppressHydrationWarning
       >

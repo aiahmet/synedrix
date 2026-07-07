@@ -218,8 +218,7 @@ export function WelcomeScreen({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
         whileHover={{ y: -2 }}
-        whileTap={{ scale: 0.97 }}
-        className="group relative inline-flex h-14 items-center gap-3 overflow-hidden rounded-2xl bg-accent px-8 text-[15px] font-semibold text-accent-foreground shadow-[0_8px_32px_-12px_color-mix(in_srgb,var(--accent)_45%,transparent)] transition-all hover:shadow-[0_12px_40px_-12px_color-mix(in_srgb,var(--accent)_55%,transparent)]"
+        className="group relative inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-[13px] font-medium text-accent-foreground shadow-none transition-colors hover:bg-accent/90"
       >
         <span>Get started</span>
         <ArrowRight
@@ -901,10 +900,9 @@ export function FinishScreen({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, delay: 0.6 }}
         whileHover={{ y: -2 }}
-        whileTap={{ scale: 0.97 }}
-        className="group inline-flex h-14 items-center gap-3 rounded-2xl bg-accent px-7 text-[15px] font-semibold text-accent-foreground shadow-[0_8px_32px_-12px_color-mix(in_srgb,var(--accent)_45%,transparent)]"
+        className="group inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-[13px] font-medium text-accent-foreground shadow-none transition-colors hover:bg-accent/90"
       >
-        <Rocket className="h-4 w-4" weight="duotone" />
+        <Rocket className="h-3.5 w-3.5" weight="duotone" />
         Start learning
         <ArrowRight
           className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5"

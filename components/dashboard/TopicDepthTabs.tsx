@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/CockpitCard";
 import {
   Compass,
+  Flask,
   GraduationCap,
   Stack,
   Books,
@@ -19,6 +20,7 @@ import {
   type BlockNode,
 } from "@/lib/content/miniMarkdown";
 import { LessonWorkedExamples, type WorkedExample } from "./LessonWorkedExamples";
+import { parseBlockMarker, BlockWidget } from "@/lib/content/tutorWidgets";
 
 /**
  * LessonBlock row shape with enriched fields from
@@ -402,31 +404,123 @@ function LessonBlockList({
  * support for math, code, callouts, lists, and tables.
  */
 function LessonBlockBody({ content }: { readonly content: string }) {
-  const ast = parseMiniMarkdownSafe(content);
-  if (ast) {
-    if (ast.blocks.length === 0) return null;
-    return (
-      <div className="flex flex-col gap-3">
-        {ast.blocks.map((block, idx) => (
-          <BlockRenderer key={idx} block={block} />
-        ))}
-      </div>
-    );
-  }
+  const segments = splitContentIntoSegments(content);
 
-  // Fallback to plain paragraph rendering on parse error
-  const paragraphs = content
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-  if (paragraphs.length === 0) return null;
+  if (segments.length === 0) return null;
+
   return (
     <div className="flex flex-col gap-3">
-      {paragraphs.map((p, idx) => (
-        <p key={idx} className="text-[13.5px] leading-relaxed text-foreground/90">{p}</p>
-      ))}
+      {segments.map((segment, idx) => {
+        if (segment.kind === "diagram_widget") {
+          const marker = parseBlockMarker(segment.value);
+          if (!marker) {
+            return (
+              <p key={idx} className="text-[13.5px] leading-relaxed text-foreground/90">
+                {segment.value}
+              </p>
+            );
+          }
+          return (
+            <div
+              key={idx}
+              className={cn(
+                "overflow-hidden rounded-xl border border-border bg-surface-elevated"
+              )}
+            >
+              <header className="flex items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2">
+                <span className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-subtle/70 text-accent" aria-hidden>
+                    <Flask className="h-3 w-3" weight="duotone" />
+                  </span>
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Diagram
+                  </span>
+                </span>
+              </header>
+              <div className="px-3.5 py-3">
+                <BlockWidget marker={marker} />
+              </div>
+            </div>
+          );
+        }
+
+        if (segment.kind === "code_widget") {
+          const marker = parseBlockMarker(segment.value);
+          if (!marker) {
+            return (
+              <p key={idx} className="text-[13.5px] leading-relaxed text-foreground/90">
+                {segment.value}
+              </p>
+            );
+          }
+          return (
+            <div key={idx} className="-mx-2">
+              <BlockWidget marker={marker} />
+            </div>
+          );
+        }
+
+        const ast = parseMiniMarkdownSafe(segment.value);
+        if (ast && ast.blocks.length > 0) {
+          return (
+            <div key={idx}>
+              {ast.blocks.map((block, blockIdx) => (
+                <BlockRenderer key={blockIdx} block={block} />
+              ))}
+            </div>
+          );
+        }
+
+        const paragraphs = segment.value
+          .split(/\n\n+/)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0);
+        if (paragraphs.length === 0) return null;
+        return (
+          <div key={idx} className="flex flex-col gap-3">
+            {paragraphs.map((p, pIdx) => (
+              <p key={pIdx} className="text-[13.5px] leading-relaxed text-foreground/90">
+                {p}
+              </p>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+type ContentSegment =
+  | { kind: "text"; value: string }
+  | { kind: "diagram_widget"; value: string }
+  | { kind: "code_widget"; value: string };
+
+function splitContentIntoSegments(content: string): ContentSegment[] {
+  const markerRegex = /\[\[(diagram|code):[^\]]*\]\]/g;
+  const segments: ContentSegment[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = markerRegex.exec(content)) !== null) {
+    const before = content.slice(lastIndex, match.index).trim();
+    if (before.length > 0) {
+      segments.push({ kind: "text", value: before });
+    }
+    const markerText = match[0];
+    if (match[1] === "diagram") {
+      segments.push({ kind: "diagram_widget", value: markerText });
+    } else {
+      segments.push({ kind: "code_widget", value: markerText });
+    }
+    lastIndex = match.index + markerText.length;
+  }
+
+  const remaining = content.slice(lastIndex).trim();
+  if (remaining.length > 0) {
+    segments.push({ kind: "text", value: remaining });
+  }
+
+  return segments;
 }
 
 /**

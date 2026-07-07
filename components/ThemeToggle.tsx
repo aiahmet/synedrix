@@ -1,12 +1,11 @@
 "use client";
 
 import { Sun, Moon } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { useTheme } from "@/components/ThemeProvider";
 
 export function ThemeToggle() {
   const { theme, resolved, toggle } = useTheme();
-  const reduce = useReducedMotion();
   const isDark = resolved === "dark";
 
   const label =
@@ -23,8 +22,7 @@ export function ThemeToggle() {
       aria-checked={isDark}
       aria-label={label}
       onClick={toggle}
-      className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-      whileTap={reduce ? undefined : { scale: 0.92 }}
+      className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted-foreground/5 hover:text-foreground"
       transition={{ duration: 0.15, ease: [0.32, 0.72, 0, 1] }}
     >
       <motion.span

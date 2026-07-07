@@ -14,6 +14,8 @@ import { SubjectPracticeModes } from "@/components/dashboard/SubjectPracticeMode
 import { SubjectNotesPanel } from "@/components/dashboard/SubjectNotesPanel";
 import { SubjectErrorLog } from "@/components/dashboard/SubjectErrorLog";
 import { SubjectTestsPanel } from "@/components/dashboard/SubjectTestsPanel";
+import { ConfidenceVsActual } from "@/components/dashboard/ConfidenceVsActual";
+import { CockpitCard } from "@/components/dashboard/CockpitCard";
 import { ArrowLeft, Books } from "@/components/landing/icons";
 
 export function SubjectHubClient({
@@ -91,6 +93,27 @@ export function SubjectHubClient({
         subjectSlug={data.subject.slug}
       />
 
+      <ConfidenceVsActual
+        data={data.practiceRuns
+          .filter(
+            (r) =>
+              r.status === "graded" &&
+              r.overallScore !== null &&
+              r.topicConfidence !== null
+          )
+          .map((r) => ({
+            topicId: r.topicId,
+            topicSlug: r.topicSlug,
+            topicTitle: r.topicTitle,
+            chapterSlug: r.chapterSlug,
+            confidence: r.topicConfidence ?? 0,
+            actualScore: r.overallScore ?? 0,
+            lastPracticeAt: r.completedAt,
+          }))}
+        subjectSlug={data.subject.slug}
+        subjectColor={data.subject.color}
+      />
+
       <AskTutorCta
         subject={{
           slug: data.subject.slug,
@@ -105,35 +128,25 @@ export function SubjectHubClient({
 function SubjectNotFound({ slug }: { readonly slug: string }) {
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="rounded-2xl border border-border bg-surface-elevated p-1.5 shadow-[var(--shadow-soft)]">
-        <div className="rounded-xl bg-background p-7 text-center sm:p-8">
-          <span
-            className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--subject-french) 12%, transparent)",
-              color: "var(--subject-french)",
-            }}
-            aria-hidden
-          >
-            <Books className="h-5 w-5" weight="duotone" />
-          </span>
+      <CockpitCard>
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <Books className="h-6 w-6" style={{ color: "var(--subject-french)" }} weight="duotone" />
           <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
             No subject called &ldquo;{slug}&rdquo;
           </h2>
-          <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-muted-foreground">
+          <p className="mx-auto max-w-sm text-[12.5px] text-muted-foreground">
             The slug you followed does not match a canonical subject.
             Pick one from the catalog and the hub will load.
           </p>
           <Link
             href="/subjects"
-            className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
+            className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
           >
             <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
             Back to subjects
           </Link>
         </div>
-      </div>
+      </CockpitCard>
     </div>
   );
 }

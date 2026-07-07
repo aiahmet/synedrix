@@ -2,19 +2,19 @@ import { z } from "zod";
 import { getSubjectBehavior } from "@/lib/ai/subjectBehaviors";
 
 export const lessonSectionSchema = z.object({
-  heading: z.string().min(1).max(80),
-  body: z.string().min(20).max(4000),
+  heading: z.string().min(1).max(200),
+  body: z.string().min(1).max(15000),
 });
 
 export const lessonGlossaryEntrySchema = z.object({
-  term: z.string().min(1).max(40),
-  definition: z.string().min(5).max(300),
+  term: z.string().min(1).max(150),
+  definition: z.string().min(1).max(1500),
 });
 
 export const lessonSchema = z.object({
-  sections: z.array(lessonSectionSchema).min(3).max(12),
-  glossary: z.array(lessonGlossaryEntrySchema).max(30),
-}).strict();
+  sections: z.array(lessonSectionSchema).min(1).max(30),
+  glossary: z.array(lessonGlossaryEntrySchema).max(50),
+});
 
 export type LessonShape = z.infer<typeof lessonSchema>;
 

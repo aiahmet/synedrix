@@ -9,17 +9,6 @@ import {
 import { AuthBrandPanel } from "@/components/auth/AuthBrandPanel";
 import { clerkAppearance } from "@/components/auth/clerkAppearance";
 
-/**
- * /sign-in.
- *
- * Server-rendered shell that wraps Clerk's SignIn component. The
- * shell carries the brand panel on the left and a clean form card
- * on the right. The Clerk component is responsible for everything
- * inside the card; the page only handles the redirect and shell.
- *
- * forceRedirectUrl points at /dashboard so returning users land
- * straight on the cockpit.
- */
 export default async function SignInPage() {
   const { userId } = await auth();
   if (userId) redirect("/dashboard");
@@ -29,8 +18,8 @@ export default async function SignInPage() {
       brandPanel={<AuthBrandPanel variant="sign-in" />}
       form={
         <AuthFormCard
-          title="Welcome back"
-          description="Email or OAuth. We never share your data with model providers."
+          title="Willkommen zurück"
+          description="E-Mail oder OAuth. Wir teilen deine Daten niemals mit Modellanbietern."
         >
           <SignIn
             forceRedirectUrl="/dashboard"
@@ -40,11 +29,11 @@ export default async function SignInPage() {
         </AuthFormCard>
       }
       alternate={{
-        label: "Need an account?",
+        label: "Noch kein Konto?",
         href: "/sign-up",
-        cta: "Create one",
+        cta: "Registrieren",
       }}
-      legalNote="By signing in, you agree to the Terms of Service and Privacy Policy."
+      legalNote="Mit der Anmeldung stimmst du den Nutzungsbedingungen und der Datenschutzerklärung zu."
     />
   );
 }

@@ -7,35 +7,6 @@ import {
   Sparkle,
 } from "@/components/landing/icons";
 
-/**
- * AuthBrandPanel.
- *
- * The left half of the auth layout.
- *
- * Anti-slop:
- *   - No carded highlight rows. The previous version wrapped each
- *     row in `border bg-surface-elevated/40 p-3.5`, which reads as
- *     "list of feature cards" — the visual language of a generic
- *     SaaS landing page. The new version lets the typography
- *     breathe, with a clean icon + title + body triplet.
- *   - No proof checkmark list. The previous version had three
- *     `icon checkmark + string` rows under the highlights. That
- *     is a marketing-page cliche. The GitHub link + licence line
- *     at the bottom is enough proof of openness.
- *   - No icon container with `bg-accent/10 ring-1 ring-accent/10`.
- *     Icons render at their natural size in `text-muted-foreground`
- *     and brighten on hover. Editorial, not emoji-pill.
- *   - Editorial H2 with tight `tracking-[-0.024em]` and a small
- *     `leading-[1.04]`. The `<br />` mid-headline gives a magazine
- *     feel — the headline is the design, not the surrounding card.
- *
- * Sign-in vs sign-up:
- *   - Sign-in: three short rows that *reassure* a returning user
- *     (continuity, tutor memory, privacy). No sales pitch.
- *   - Sign-up: four rows of *what you get* (architecture, depth
- *     switching, AI structure, openness). Sells the product.
- */
-
 interface Row {
   readonly icon: typeof Sparkle;
   readonly title: string;
@@ -45,52 +16,45 @@ interface Row {
 const SIGN_IN_ROWS: readonly Row[] = [
   {
     icon: Sparkle,
-    title: "Continue exactly where you left off",
-    body: "Mastery, recent mistakes, and the review queue all load on the next click.",
+    title: "Setze dein Lernen nahtlos fort",
+    body: "Lernstand, Fehler und deine Wiederholungsliste laden mit dem nächsten Klick.",
   },
   {
     icon: ChatCircleText,
-    title: "The tutor already knows your context",
-    body: "Subject, topic, and recent errors sync across every device you use.",
+    title: "Der Tutor kennt deinen Kontext",
+    body: "Fach, Thema und deine letzten Fehler synchronisieren sich auf allen Geräten.",
   },
   {
     icon: ShieldCheck,
-    title: "Your data never leaves your tenant",
-    body: "We never sell, share, or train models on your work.",
+    title: "Deine Daten gehören dir",
+    body: "Wir verkaufen oder teilen deine Daten niemals und nutzen sie nicht zum Training von KI-Modellen.",
   },
 ];
 
 const SIGN_UP_ROWS: readonly Row[] = [
   {
     icon: Sparkle,
-    title: "Five systems, one cockpit",
-    body: "Curriculum map, tutor, practice, review, and planner — all reading the same state.",
+    title: "Fünf Systeme, ein Cockpit",
+    body: "Lehrplan, Tutor, Übungen, Wiederholungen und Planer nutzen alle denselben Zustand.",
   },
   {
     icon: ChatCircleText,
-    title: "Three depths per topic, on one page",
-    body: "Switch from Simple to Standard to Rigorous without losing your place.",
+    title: "Drei Erklärungstiefen pro Thema",
+    body: "Wechsle einfach zwischen Einfach, Standard und Anspruchsvoll, ohne den Faden zu verlieren.",
   },
   {
     icon: ShieldCheck,
-    title: "Structured AI, schema-validated, logged",
-    body: "Every generation runs through Zod and is written to the AiGeneration telemetry table.",
+    title: "Strukturierte KI, validiert und protokolliert",
+    body: "Jede Antwort wird per Zod-Schema validiert und in unserer AiGeneration-Tabelle erfasst.",
   },
   {
     icon: GitFork,
-    title: "Open source, MIT-licensed",
-    body: "Self-host, fork, or contribute. Take your data with you at any time.",
+    title: "Open Source unter MIT-Lizenz",
+    body: "Selbst hosten, forken oder beitragen. Du kannst deine Daten jederzeit exportieren.",
   },
 ];
 
-/**
- * A short, calm stat strip that gives the brand panel enough
- * weight to not feel sparse. Used only on sign-in (sign-up's
- * four highlights already provide density). Numbers are real,
- * not campaign numbers: 1 cockpit + 5 systems = 1 dashboard
- * unifying curriculum, tutor, practice, review, and planner.
- */
-const SIGN_IN_STAT = "1 cockpit · 5 systems · always-on review queue";
+const SIGN_IN_STAT = "1 Cockpit · 5 Systeme · aktive Wiederholungsliste";
 
 export function AuthBrandPanel({
   variant,
@@ -103,33 +67,33 @@ export function AuthBrandPanel({
   return (
     <div className="flex w-full max-w-2xl flex-col gap-7 lg:gap-9">
       <div className="flex flex-col gap-4">
-        <AuthEyebrow>{isSignIn ? "Welcome back" : "Get started"}</AuthEyebrow>
+        <AuthEyebrow>{isSignIn ? "Willkommen zurück" : "Erste Schritte"}</AuthEyebrow>
         <h2 className="text-balance text-[clamp(1.95rem,2.4vw+0.5rem,2.75rem)] font-semibold leading-[1.04] tracking-[-0.024em] text-foreground">
           {isSignIn ? (
             <>
-              Pick up where
+              Mach weiter, wo du
               <br />
-              you left off.
+              aufgehört hast.
             </>
           ) : (
             <>
-              The intelligence layer
+              Die Intelligenzschicht
               <br />
-              for your Abitur.
+              für dein Abitur.
             </>
           )}
         </h2>
-        <p className="max-w-md text-pretty text-[14.5px] leading-[1.55] text-muted-foreground">
+        <p className="max-w-md text-pretty text-[14px] leading-[1.55] text-muted-foreground">
           {isSignIn
-            ? "Your streak, your review queue, and your tutor context are waiting on the other side of this form. Email or OAuth — your choice."
-            : "One tab, five hours of focused study. Everything you need to go from \"I don't get this\" to \"I can solve this alone.\""}
+            ? "Dein Streak, deine Wiederholungen und dein Tutor-Kontext warten auf dich. Per E-Mail oder OAuth – ganz wie du möchtest."
+            : "Ein Tab, fokussiertes Lernen. Alles, was du brauchst, um vom „Ich verstehe das nicht“ zum „Ich kann das alleine lösen“ zu kommen."}
         </p>
       </div>
 
       {isSignIn && (
         <div
           className="text-[12px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80"
-          aria-label="Architecture summary"
+          aria-label="Architektur-Zusammenfassung"
         >
           {SIGN_IN_STAT}
         </div>
@@ -164,14 +128,14 @@ export function AuthBrandPanel({
           rel="noopener noreferrer"
           className="group inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-foreground transition-colors hover:text-accent"
         >
-          View the source on GitHub
+          Quellcode auf GitHub ansehen
           <ArrowRight
             className="h-3 w-3 transition-transform group-hover:translate-x-0.5"
             weight="bold"
           />
         </a>
         <p className="text-[11.5px] text-muted-foreground/80">
-          MIT licensed. Self-host or use the hosted instance.
+          Unter MIT-Lizenz. Selbst hosten oder die gehostete Instanz nutzen.
         </p>
       </div>
     </div>

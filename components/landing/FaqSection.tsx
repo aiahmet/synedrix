@@ -4,24 +4,10 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { cn } from "@/lib/utils/cn";
-import { Section } from "@/components/landing/ui/Section";
+import { Section, SectionHeading } from "@/components/landing/ui/Section";
 import { ArrowRight } from "@/components/landing/icons";
 import { faqItems } from "@/components/landing/data";
 
-/**
- * FAQ section.
- *
- * A JS-controlled accordion with Motion-powered height
- * animation. Each answer is short on purpose; deeper
- * questions should be answered in the README,
- * CONTRIBUTING, or the spec doc.
- *
- * The heading is a concrete editorial H2 with no
- * description paragraph — the questions themselves
- * carry the section's meaning. The closing bar is a
- * single GitHub link + licence line matching the brand
- * panel pattern from the style rulebook.
- */
 export function FaqSection() {
   const reduce = useReducedMotion() ?? false;
   const [openIndex, setOpenIndex] = useState<number | null>(0);
@@ -38,38 +24,40 @@ export function FaqSection() {
         viewport={{ once: true, amount: 0.4 }}
         transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
       >
-        <h2
-          id="faq-title"
-          className="text-[clamp(1.95rem,2.4vw+0.5rem,2.75rem)] font-semibold leading-[1.04] tracking-[-0.024em] text-foreground"
-        >
-          The honest
-          <br />
-          FAQ.
-        </h2>
+        <SectionHeading
+          titleId="faq-title"
+          title={
+            <>
+              Häufig gestellte
+              <br />
+              Lehrplanfragen.
+            </>
+          }
+        />
       </motion.div>
 
-      <ul className="mt-14 overflow-hidden rounded-2xl border border-border bg-surface-elevated">
+      <ul className="mt-14 divide-y divide-border/40 border-t border-b border-border/40">
         {faqItems.map((item, i) => {
           const open = openIndex === i;
           return (
             <li
               key={item.question}
-              className="border-b border-border/70 last:border-b-0"
+              className="py-1"
             >
               <button
                 type="button"
                 aria-expanded={open}
                 aria-controls={`faq-panel-${i}`}
                 onClick={() => setOpenIndex(open ? null : i)}
-                className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left outline-none transition-colors hover:bg-surface focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-elevated sm:px-6 sm:py-5"
+                className="flex w-full items-center justify-between gap-4 py-4 text-left outline-none transition-colors text-foreground/80 hover:text-foreground focus-visible:text-foreground"
               >
-                <span className="text-[15px] font-semibold tracking-tight text-foreground sm:text-[16px]">
+                <span className="text-[14.5px] font-medium leading-[1.25] tracking-[-0.005em] sm:text-[15.5px]">
                   {item.question}
                 </span>
                 <span
                   aria-hidden
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-surface font-mono text-[14px] font-medium text-muted-foreground transition-transform duration-300",
+                    "font-mono text-[16px] font-normal text-muted-foreground/60 transition-all duration-300 px-2",
                     open && "rotate-45 text-accent"
                   )}
                 >
@@ -85,12 +73,12 @@ export function FaqSection() {
                   opacity: open ? 1 : 0,
                 }}
                 transition={{
-                  duration: reduce ? 0 : 0.35,
+                  duration: reduce ? 0 : 0.25,
                   ease: [0.16, 1, 0.3, 1],
                 }}
                 className="overflow-hidden"
               >
-                <p className="px-5 pb-5 text-[13.5px] leading-relaxed text-muted-foreground sm:px-6 sm:pb-6 sm:text-[14px]">
+                <p className="pb-5 text-[13.5px] leading-[1.55] text-muted-foreground sm:pb-6 max-w-2xl">
                   {item.answer}
                 </p>
               </motion.div>
@@ -99,18 +87,18 @@ export function FaqSection() {
         })}
       </ul>
 
-      <div className="mt-6 flex flex-col gap-1.5 border-t border-border pt-6">
+      <div className="mt-8 flex flex-col gap-1.5 border-t border-border pt-6">
         <a
           href="https://github.com/aiahmet/synedrix/discussions"
           target="_blank"
           rel="noopener noreferrer"
-          className="group inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-foreground outline-none transition-colors hover:text-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="group inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-foreground outline-none transition-colors hover:text-accent"
         >
-          Ask on GitHub Discussions
+          Auf GitHub-Discussions fragen
           <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" weight="bold" />
         </a>
         <p className="text-[11.5px] text-muted-foreground/80">
-          MIT licensed. Every answer above is from the spec, not a marketer.
+          Unter MIT-Lizenz. Jede Antwort oben stammt aus der Spezifikation, nicht von einem Vermarkter.
         </p>
       </div>
     </Section>

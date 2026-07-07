@@ -9,17 +9,6 @@ import {
 import { AuthBrandPanel } from "@/components/auth/AuthBrandPanel";
 import { clerkAppearance } from "@/components/auth/clerkAppearance";
 
-/**
- * /sign-up.
- *
- * Server-rendered shell that wraps Clerk's SignUp component. The
- * sign-up variant of the brand panel carries the four value
- * highlights and a short what-you-get preview so the user
- * understands the product before they commit their email.
- *
- * forceRedirectUrl points at /dashboard so new users land straight
- * on the empty cockpit.
- */
 export default async function SignUpPage() {
   const { userId } = await auth();
   if (userId) redirect("/dashboard");
@@ -29,8 +18,8 @@ export default async function SignUpPage() {
       brandPanel={<AuthBrandPanel variant="sign-up" />}
       form={
         <AuthFormCard
-          title="Create your account"
-          description="Free during beta. No credit card. Cancel any time."
+          title="Konto erstellen"
+          description="Kostenlos während der Beta-Phase. Keine Kreditkarte erforderlich."
         >
           <SignUp
             forceRedirectUrl="/dashboard"
@@ -40,11 +29,11 @@ export default async function SignUpPage() {
         </AuthFormCard>
       }
       alternate={{
-        label: "Already have an account?",
+        label: "Bereits ein Konto?",
         href: "/sign-in",
-        cta: "Sign in",
+        cta: "Anmelden",
       }}
-      legalNote="By creating an account, you agree to the Terms of Service and Privacy Policy."
+      legalNote="Mit der Registrierung stimmst du den Nutzungsbedingungen und der Datenschutzerklärung zu."
     />
   );
 }

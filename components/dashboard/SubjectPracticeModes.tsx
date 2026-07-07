@@ -77,15 +77,7 @@ export function SubjectPracticeModes({
             href={`/subjects/${subjectSlug}/${nextBestChapterSlug}/${nextBestTopicSlug}`}
             className="group rounded-lg border border-border bg-surface px-4 py-3.5 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
           >
-          <span
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md"
-            style={{
-              backgroundColor: `color-mix(in srgb, ${fillVar} 14%, transparent)`,
-              color: fillVar,
-            }}
-          >
-            <Target className="h-4 w-4" weight="duotone" />
-          </span>
+          <Target className="h-4 w-4" weight="duotone" style={{ color: fillVar }} />
           <p className="mt-2.5 text-[13px] font-semibold tracking-tight text-foreground">
             Next recommended topic
           </p>
@@ -103,9 +95,7 @@ export function SubjectPracticeModes({
           href={`/subjects/${subjectSlug}#roadmap`}
           className="group rounded-lg border border-border bg-surface px-4 py-3.5 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-accent/10 text-accent">
-            <BookOpenIcon className="h-4 w-4" weight="duotone" />
-          </span>
+          <BookOpenIcon className="h-4 w-4" weight="duotone" style={{ color: "var(--accent)" }} />
           <p className="mt-2.5 text-[13px] font-semibold tracking-tight text-foreground">
             Pick a chapter
           </p>
@@ -122,9 +112,7 @@ export function SubjectPracticeModes({
           href="/practice"
           className="group rounded-lg border border-border bg-surface px-4 py-3.5 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-accent/10 text-accent">
-            <Target className="h-4 w-4" weight="duotone" />
-          </span>
+          <Target className="h-4 w-4" weight="duotone" style={{ color: "var(--accent)" }} />
           <p className="mt-2.5 text-[13px] font-semibold tracking-tight text-foreground">
             Practice Arena
           </p>
@@ -141,9 +129,7 @@ export function SubjectPracticeModes({
           href={`/tutor?subject=${subjectSlug}`}
           className="group rounded-lg border border-border bg-surface px-4 py-3.5 transition-colors hover:border-accent/40 hover:bg-surface-elevated"
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-accent/10 text-accent">
-            <Cards className="h-4 w-4" weight="duotone" />
-          </span>
+          <Cards className="h-4 w-4" weight="duotone" style={{ color: "var(--accent)" }} />
           <p className="mt-2.5 text-[13px] font-semibold tracking-tight text-foreground">
             Ask the tutor
           </p>

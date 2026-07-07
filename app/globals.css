@@ -12,7 +12,6 @@
  *   - Surface ladder:  background -> surface -> surface-elevated
  *   - Border ladder:   border-faint (hairlines) -> border -> border-strong
  *   - Accent ladder:   accent (CTA) -> accent-subtle (quiet) -> accent-deep (hover)
- *   - Halo & glow:     used for product preview atmospheres
  */
 
 :root,
@@ -40,12 +39,6 @@
   --accent-deep: #115e59;
 
   --ring: #0d9488;
-
-  /* Glints / halos for hero atmospherics. Kept very low alpha so the
-     page never reads as "AI gradient slop". */
-  --halo-1: rgba(13, 148, 136, 0.08);
-  --halo-2: rgba(13, 148, 136, 0.05);
-  --halo-3: rgba(13, 148, 136, 0.03);
 
   /* Subject hues, used only as small categorical labels. */
   --subject-math: #6366f1;
@@ -80,10 +73,6 @@
     --accent-deep: #99f6e4;
 
     --ring: #2dd4bf;
-
-    --halo-1: rgba(45, 212, 191, 0.10);
-    --halo-2: rgba(45, 212, 191, 0.06);
-    --halo-3: rgba(45, 212, 191, 0.04);
   }
 }
 
@@ -110,10 +99,6 @@
   --accent-deep: #99f6e4;
 
   --ring: #2dd4bf;
-
-  --halo-1: rgba(45, 212, 191, 0.10);
-  --halo-2: rgba(45, 212, 191, 0.06);
-  --halo-3: rgba(45, 212, 191, 0.04);
 }
 
 @theme inline {
@@ -224,25 +209,6 @@ body {
 }
 
 /*
- * Hairline grid texture, used as a non-blocking atmosphere in hero / CTA.
- * Applied via ::before on .grid-texture wrappers.
- */
-.grid-texture {
-  position: relative;
-  isolation: isolate;
-}
-.grid-texture::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image: radial-gradient(circle, currentColor 0.6px, transparent 0.6px);
-  background-size: 28px 28px;
-  opacity: 0.018;
-  pointer-events: none;
-}
-
-/*
  * Fixed full-bleed grain layer. pointer-events-none, behind everything,
  * so it never participates in hit-testing or scroll-driven repaints.
  * Calm physical-paper feel without being noisy.
@@ -267,11 +233,6 @@ body {
   .grain-overlay {
     display: none;
   }
-}
-
-/* Soft inner highlight for double-bezel cards. */
-.inner-highlight {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 
 /* Smooth color transitions for theme switch. */
@@ -428,4 +389,37 @@ html {
   height: 4px;
   border-radius: 50%;
   background-color: color-mix(in srgb, var(--border) 100%, transparent);
+}
+
+/*
+ * Learning loop spine pulse.
+ *
+ * A luminous accent segment travels left to right along
+ * the horizontal connector line, communicating forward
+ * progress through the six-step workflow.
+ */
+@keyframes spine-pulse {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/*
+ * Knowledge graph connection line glow.
+ *
+ * A subtle opacity pulse that travels along graph edges,
+ * giving the knowledge graph a living, breathing feel
+ * after the initial line-draw animation completes.
+ */
+@keyframes line-glow {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }

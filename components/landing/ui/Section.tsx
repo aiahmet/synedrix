@@ -70,7 +70,7 @@ export function SectionHeading({
       {eyebrow}
       <h2
         id={titleId}
-        className="text-[clamp(1.625rem,2.5vw+0.5rem,2.5rem)] font-semibold leading-[1.12] tracking-[-0.02em] text-foreground"
+        className="text-[clamp(1.95rem,2.4vw+0.5rem,2.75rem)] font-semibold leading-[1.04] tracking-[-0.024em] text-foreground"
       >
         {title}
       </h2>

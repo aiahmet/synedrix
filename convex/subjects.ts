@@ -2225,3 +2225,24 @@ export const getDependedOnBy = query({
     });
   },
 });
+
+/**
+ * getTopicById.
+ *
+ * Simple lookup by topic id. Returns slug for URL routing.
+ */
+export const getTopicById = query({
+  args: { topicId: v.id("topics") },
+  returns: v.union(
+    v.object({
+      slug: v.string(),
+      title: v.string(),
+    }),
+    v.null()
+  ),
+  handler: async (ctx, { topicId }) => {
+    const topic = await ctx.db.get(topicId);
+    if (!topic) return null;
+    return { slug: topic.slug, title: topic.title };
+  },
+});

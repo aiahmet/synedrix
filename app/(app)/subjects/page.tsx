@@ -24,9 +24,10 @@ import { ArrowLeft, Books, Sparkle } from "@/components/landing/icons";
  * state and per-card actions.
  */
 export default async function SubjectsPage() {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) redirect("/sign-in");
 
+  const token = await getToken({ template: "convex" }).catch(() => null);
   const user = await currentUser();
   const firstName = user?.firstName ?? "Student";
 
@@ -34,7 +35,7 @@ export default async function SubjectsPage() {
   let isConvexConfigured = true;
 
   try {
-    preloaded = await preloadQuery(api.subjects.list, {});
+    preloaded = await preloadQuery(api.subjects.list, {}, token ? { token } : {});
   } catch (err) {
     // The most common failure here is a missing
     // NEXT_PUBLIC_CONVEX_URL or a Convex deployment that has
@@ -50,15 +51,13 @@ export default async function SubjectsPage() {
     <div className="mx-auto flex max-w-6xl flex-col gap-6 sm:gap-7">
       <header className="flex flex-col gap-1.5 pt-1">
         <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          / subjects
+          / faecher
         </span>
         <h1 className="text-balance text-[clamp(1.6rem,2.2vw+0.5rem,2rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
-          Choose what to master, {firstName}.
+          Wähle deine Fächer, {firstName}.
         </h1>
         <p className="max-w-xl text-pretty text-[13.5px] leading-relaxed text-muted-foreground">
-          Every subject here unlocks the same five systems: the
-          curriculum map, AI tutor, practice engine, review queue,
-          and planner. Enroll once and the cockpit tracks the rest.
+          Jedes Fach hier schaltet dieselben fünf Systeme frei: Lehrplan, KI-Tutor, Übungsarena, Wiederholungsliste und Planer. Einmal einschreiben, den Rest trackt das Cockpit.
         </p>
         <div className="mt-2">
           <Link
@@ -66,7 +65,7 @@ export default async function SubjectsPage() {
             className="inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" weight="bold" />
-            Back to cockpit
+            Zurück zum Cockpit
           </Link>
         </div>
       </header>
@@ -79,11 +78,11 @@ export default async function SubjectsPage() {
 
       {!isConvexConfigured && (
         <p className="mt-2 text-center font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          Convex offline. Subject picker is read-only. Run{" "}
+          Convex offline. Fächerkatalog ist schreibgeschützt. Führe{" "}
           <code className="rounded bg-surface px-1.5 py-0.5 text-foreground">
             npx convex dev
           </code>{" "}
-          to wire it.
+          aus, um ihn zu verbinden.
         </p>
       )}
     </div>
@@ -102,24 +101,13 @@ function OfflineFallback() {
   return (
     <CockpitCard>
       <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <span
-          className="flex h-12 w-12 items-center justify-center rounded-xl"
-          style={{
-            backgroundColor:
-              "color-mix(in srgb, var(--subject-physics) 14%, transparent)",
-            color: "var(--subject-physics)",
-          }}
-          aria-hidden
-        >
-          <Books className="h-6 w-6" weight="duotone" />
-        </span>
+        <Books className="h-6 w-6" style={{ color: "var(--subject-physics)" }} weight="duotone" />
         <div className="flex flex-col gap-1">
           <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
-            Subject catalog is unreachable
+            Fächerkatalog ist nicht erreichbar
           </h2>
           <p className="max-w-sm text-[12.5px] text-muted-foreground">
-            The picker needs Convex to load the curriculum. Start the dev
-            server and the catalog will appear here.
+            Die Auswahl benötigt Convex, um den Lehrplan zu laden. Starte den Dev-Server und der Katalog wird hier angezeigt.
           </p>
         </div>
         <Link
@@ -127,7 +115,7 @@ function OfflineFallback() {
           className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
         >
           <Sparkle className="h-3.5 w-3.5" weight="duotone" />
-          Open the cockpit
+          Öffne das Cockpit
         </Link>
       </div>
     </CockpitCard>

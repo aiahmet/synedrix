@@ -26,7 +26,7 @@ export function GettingStarted() {
     <Section
       id="getting-started"
       ariaLabelledBy="getting-started-title"
-      className="py-24 sm:py-32"
+      className="bg-surface py-24 sm:py-32"
     >
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 16 }}

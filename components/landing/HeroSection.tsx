@@ -1,138 +1,320 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
+import type { ReactNode } from "react";
 
-import { ArrowRight } from "@/components/landing/icons";
+import { ArrowRight, ChatCircleText, Target, Timer, ClockCounterClockwise } from "@/components/landing/icons";
+import type { PhosphorIconComponent } from "@/components/landing/icons";
 
-/**
- * Hero section. Real rewrite, not polish.
- *
- * The previous version (and all my prior edits to it) was still the
- * SaaS hero template — left "Five systems, one state." copy + right
- * `DashboardMock` of fake Tableau-style widgets. Killing the halos
- * and tightening the chips did not change the premise. The premise
- * was the slop. So this rewrite starts from scratch:
- *
- *   1. **Drops the right-side `DashboardMock` entirely.** Synthesizing
- *      a fake Tableau dashboard is the canonical 2014 SaaS hero move
- *      and proves nothing specific about Synedrix. A real study OS
- *      earns trust through a concrete claim, not a static product
- *      preview. The hero is now a single editorial column.
- *   2. **Anchors the H1 on the product's actual differentiator**
- *      ("yesterday's mistake becomes tomorrow's first question") —
- *      not brand-abstract "Five systems, one state." The H1 names the
- *      mechanism behind the curtain: mistake log → tutor → planner.
- *   3. **Reduces two CTAs to one primary + one ghost link.** Two
- *      equal buttons is the SaaS-template cliche. Primary commits the
- *      user; ghost "Sign in" returns them. Both routes matter, but
- *      they are not equal-weight actions.
- *   4. **Replaces the stat strip with honest product proof at the
- *      bottom** — MIT, single-user, free during beta, GitHub source
- *      link. No fake-precise numbers. The proof that this is real
- *      software is the source, not "7 / 19 / 6 / 3."
- *   5. **No atmospherics. No pretense chrome.** `bg-background`,
- *      single column, max-width 4xl, typography does the work.
- *
- * Style-guide checkpoints (§1, §2, §3, §6, §9):
- *   - no halos, no dot grids, no decorative overlays ✓
- *   - plain uppercase eyebrow, no pill chip ✓
- *   - editorial H1, manual `<br />`, tight tracking, manual line break ✓
- *   - one accent CTA, hover bg-accent/90, shadow-[var(--shadow-pop)], no
- *     `active:scale-[0.97]` ✓
- *   - ghost secondary, no background ✓
- *   - honest GitHub-link proof, no checkmark list ✓
- *   - entrance motion preserved; reduced-motion users collapse to end ✓
- */
+function SingleLayerCard({ children, className }: { readonly children: ReactNode; readonly className?: string }) {
+  return (
+    <div
+      className={`rounded-xl border border-border bg-background p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)] dark:border-border/60 dark:bg-background dark:shadow-[0_1px_0_0_rgb(255_255_255_/_0.05),0_8px_24px_-12px_rgba(0,0,0,0.45)] ${className ?? ""}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PanelHeader({
+  icon: Icon,
+  label,
+  badge,
+}: {
+  readonly icon: PhosphorIconComponent;
+  readonly label: string;
+  readonly badge?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-border/40 pb-2 mb-2">
+      <div className="flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground/80" weight="duotone" />
+        <span className="text-[11px] font-medium text-foreground">{label}</span>
+      </div>
+      {badge && (
+        <span className="font-mono text-[10px] text-accent">
+          {badge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TutorPanel() {
+  return (
+    <SingleLayerCard className="w-56">
+      <PanelHeader icon={ChatCircleText} label="KI-Tutor" badge="Mathe" />
+      <div className="space-y-2">
+        <div className="flex justify-end">
+          <div className="max-w-[85%] rounded bg-muted-foreground/5 px-2.5 py-1 text-[11px] leading-relaxed text-foreground/80">
+            Zeig mir die Kettenregel Schritt für Schritt
+          </div>
+        </div>
+
+        <div className="flex justify-start">
+          <div className="max-w-[90%] border-l border-accent/40 pl-2.5 py-0.5">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-medium text-accent">d/dx</span>{" "}
+              f(g(x)) = f&prime;(g(x)) &middot; g&prime;(x)
+            </p>
+            <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground/75">
+              Ableitung der äußeren Funktion an der inneren Stelle, multipliziert mit der inneren Ableitung.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 pl-0.5">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/35" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/35 [animation-delay:0.15s]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/35 [animation-delay:0.3s]" />
+        </div>
+      </div>
+    </SingleLayerCard>
+  );
+}
+
+function MissionPanel() {
+  return (
+    <SingleLayerCard className="w-52">
+      <PanelHeader icon={Target} label="Heutige Mission" />
+      <div className="space-y-1.5">
+        {[
+          { text: "Kettenregel wiederholen", done: false },
+          { text: "Kinematik-Aufgaben", done: false },
+          { text: "Subjonctif-Drill", done: true },
+        ].map((item) => (
+          <div key={item.text} className="flex items-center gap-2">
+            <div
+              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                item.done
+                  ? "border-accent bg-accent"
+                  : "border-border"
+              }`}
+            >
+              {item.done && (
+                <div className="h-1.5 w-1.5 rounded-full bg-background" />
+              )}
+            </div>
+            <span
+              className={`text-[11px] ${
+                item.done
+                  ? "text-muted-foreground line-through"
+                  : "text-foreground"
+              }`}
+            >
+              {item.text}
+            </span>
+          </div>
+        ))}
+        <p className="pt-1 text-[10px] font-medium text-accent">
+          3 Aufgaben &middot; ~42 Min
+        </p>
+      </div>
+    </SingleLayerCard>
+  );
+}
+
+function MasteryPanel() {
+  return (
+    <SingleLayerCard className="w-52">
+      <PanelHeader icon={ClockCounterClockwise} label="Lernstand" />
+      <div className="space-y-2.5">
+        {[
+          { subject: "Mathe", pct: 78 },
+          { subject: "Physik", pct: 62 },
+          { subject: "Französisch", pct: 45 },
+        ].map((item) => (
+          <div key={item.subject}>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-medium text-foreground">
+                {item.subject}
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {item.pct}%
+              </span>
+            </div>
+            <div className="mt-1 h-1 rounded-full bg-muted/20">
+              <div
+                className="h-1 rounded-full bg-accent transition-all duration-700"
+                style={{ width: `${item.pct}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </SingleLayerCard>
+  );
+}
+
+function ReviewsPanel() {
+  return (
+    <SingleLayerCard className="w-52">
+      <PanelHeader icon={Timer} label="Wiederholungen" badge="2 fällig" />
+      <div className="space-y-1.5">
+        {[
+          { text: "Definitionsbereich: log₂(x)", status: "due" as const },
+          { text: "Subjonctif präsent", status: "due" as const },
+          { text: "Newtons 2. Gesetz", status: "done" as const },
+        ].map((item) => (
+          <div key={item.text} className="flex items-center gap-2">
+            <div
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                item.status === "due"
+                  ? "bg-accent"
+                  : "bg-muted"
+              }`}
+            />
+            <span
+              className={`truncate text-[11px] ${
+                item.status === "done"
+                  ? "text-muted-foreground line-through"
+                  : "text-foreground"
+              }`}
+            >
+              {item.text}
+            </span>
+          </div>
+        ))}
+      </div>
+    </SingleLayerCard>
+  );
+}
+
+function MobilePanelGrid() {
+  return (
+    <div className="mt-8 grid grid-cols-2 gap-3 lg:hidden">
+      <TutorPanel />
+      <MissionPanel />
+      <MasteryPanel />
+      <ReviewsPanel />
+    </div>
+  );
+}
+
 export function HeroSection() {
   const reduce = useReducedMotion();
 
   return (
     <section
       aria-labelledby="hero-title"
-      className="relative flex min-h-[100dvh] flex-col bg-background px-6 pt-32 pb-24 sm:px-10 md:pt-36 md:pb-28"
+      className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background px-6 pt-24 sm:px-10 lg:pt-28"
     >
-      <motion.div
-        initial={reduce ? false : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.85, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
-        className="mx-auto flex w-full max-w-4xl flex-col"
-      >
-        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-          For the German Gymnasium · single-user by design
-        </span>
-
-        <h1
-          id="hero-title"
-          className="mt-6 max-w-3xl text-balance text-[clamp(2.5rem,5.4vw+0.6rem,4.75rem)] font-bold leading-[1.02] tracking-[-0.04em] text-foreground"
+      {/* Main content stack */}
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col">
+        {/* Editorial block */}
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center text-center"
         >
-          Yesterday you missed the sign in ln(a&middot;b).
-          <br />
-          Today your tutor walks you through why.
-        </h1>
+          {/* Eyebrow */}
+          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            Für das deutsche Gymnasium &middot; Einzelbenutzer-System
+          </span>
 
-        <p className="mt-8 max-w-2xl text-pretty text-[17px] leading-relaxed text-muted-foreground sm:text-[19px]">
-          Your mistake log feeds your tutor. Your tutor feeds your planner.
-          Curriculum, practice, review, and reflection read the same state
-          &mdash; so nothing gets re-loaded between sessions.
-        </p>
-
-        <div className="mt-10 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-6">
-          <Link
-            href="/sign-up"
-            className="group inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-[13px] font-medium text-accent-foreground shadow-none outline-none transition-colors hover:bg-accent/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          {/* Primary headline */}
+          <h1
+            id="hero-title"
+            className="mt-6 max-w-4xl text-balance text-[clamp(2.25rem,5vw+0.5rem,4.25rem)] font-bold leading-[1.02] tracking-[-0.04em] text-foreground"
           >
-            Start learning
-            <ArrowRight
-              className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
-              weight="bold"
-            />
-          </Link>
+            Das Betriebssystem
+            <br />
+            <span className="text-accent">für das Lernen.</span>
+          </h1>
 
-          <Link
-            href="/sign-in"
-            className="inline-flex h-10 items-center gap-1.5 px-2 text-[13px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            Sign in
-            <ArrowRight className="h-3 w-3" weight="bold" />
-          </Link>
-        </div>
-      </motion.div>
-
-      {/* Honest product proof at the bottom. No fake stat strip, no
-          checkmark list, no marketing veneer. Open-source + single-
-          user + free-during-beta is the only truthful stack of
-          claims to make about a v1 product, and the GitHub link is
-          how the user verifies them. */}
-      <motion.div
-        initial={reduce ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.9, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="mx-auto mt-28 w-full max-w-4xl"
-      >
-        <div className="border-t border-border pt-7">
-          <p className="text-[11.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            MIT licensed · single-user · no signup wall
+          {/* Subtext */}
+          <p className="mt-6 max-w-2xl text-pretty text-[16px] leading-relaxed text-muted-foreground sm:text-[17px]">
+            Lerne intelligenter mit einem KI-Tutor, der deinen Lehrplan versteht,
+            deinen Fortschritt trackt und jede Lerneinheit von der Unklarheit zur Meisterschaft führt.
           </p>
-          <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-muted-foreground/80">
-            Self-host or use the hosted instance. Your work never trains
-            anyone else&rsquo;s model. No telemetry is shared with model
-            providers.
-          </p>
-          <a
-            href="https://github.com/aiahmet/synedrix"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group mt-5 inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground transition-colors hover:text-accent"
-          >
-            View the source on GitHub
-            <ArrowRight
-              className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
-              weight="bold"
+
+          {/* CTA row */}
+          <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
+            <Link
+              href="/sign-up"
+              className="group inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-[13px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+            >
+              Kostenlos starten
+              <ArrowRight
+                className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
+                weight="bold"
+              />
+            </Link>
+            <Link
+              href="#demo"
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-5 text-[13px] font-medium text-foreground transition-colors hover:bg-muted/10"
+            >
+              Demo ansehen
+              <ArrowRight className="h-3 w-3" weight="bold" />
+            </Link>
+          </div>
+
+          {/* Trust row */}
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            {["KI-Tutor", "Adaptives Üben", "Intelligente Wiederholungen", "Lernstands-Tracking"].map(
+              (item, i) => (
+                <span
+                  key={item}
+                  className="flex items-center gap-2 text-[12px] text-muted-foreground"
+                >
+                  {i > 0 && <span className="h-1 w-1 rounded-full bg-border" />}
+                  {item}
+                </span>
+              ),
+            )}
+          </div>
+        </motion.div>
+
+        {/* Flexible spacer */}
+        <div className="flex-1 pt-12 md:pt-16" />
+
+        {/* Mockup scene */}
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="relative mx-auto w-full max-w-5xl"
+        >
+          {/* Desktop glass panels */}
+          <div className="hidden lg:block" aria-hidden>
+            {/* AI Tutor */}
+            <div className="absolute left-0 top-1/2 z-10 -translate-x-[calc(100%-24px)] -translate-y-1/2">
+              <TutorPanel />
+            </div>
+
+            {/* Today's Mission */}
+            <div className="absolute right-0 top-[12%] z-10 translate-x-[calc(100%-24px)]">
+              <MissionPanel />
+            </div>
+
+            {/* Mastery Progress */}
+            <div className="absolute right-0 bottom-[12%] z-10 translate-x-[calc(100%-24px)]">
+              <MasteryPanel />
+            </div>
+          </div>
+
+          {/* Main dashboard mockup */}
+          <div className="relative overflow-hidden rounded-2xl border border-border shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)] dark:border-border/60 dark:shadow-[0_1px_0_0_rgb(255_255_255_/_0.05),0_8px_24px_-12px_rgba(0,0,0,0.45)]">
+            <Image
+              src="/synedrix-github-banner.png"
+              alt="Synedrix-Dashboard mit Cockpit, Schwachstellen und Wiederholungswarteschlange"
+              width={1200}
+              height={900}
+              className="h-auto w-full object-cover"
+              priority
             />
-          </a>
-        </div>
-      </motion.div>
+          </div>
+        </motion.div>
+
+        {/* Mobile panels */}
+        <MobilePanelGrid />
+
+        {/* Bottom breathing room */}
+        <div className="h-14 md:h-20" />
+      </div>
     </section>
   );
 }

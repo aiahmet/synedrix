@@ -45,11 +45,10 @@ export function SubjectMasteryStrip({
   return (
     <CockpitCard>
       <CockpitCardHeader
-        label="Subjects"
-        trailing={
+        label="Subjects"          trailing={
           <Link
             href="/subjects"
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-elevated px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-accent-border hover:text-foreground"
+            className="inline-flex items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
           >
             All
             <ArrowUpRight className="h-3 w-3" weight="bold" />
@@ -74,17 +73,9 @@ function SubjectRow({ subject }: { readonly subject: SubjectMasteryEntry }) {
     <li className="py-3 first:pt-0 last:pb-0">
       <Link
         href={`/subjects/${subject.slug}`}
-        className="group flex items-center gap-4 rounded-lg px-1 py-1 outline-none transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring"
+        className="group flex items-center gap-4 rounded-lg px-1 py-1 outline-none transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40"
       >
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
-          style={{
-            backgroundColor: `color-mix(in srgb, ${fillVar} 12%, transparent)`,
-            borderColor: `color-mix(in srgb, ${fillVar} 28%, transparent)`,
-          }}
-        >
-          <SubjectGlyph icon={subject.icon} className="h-[1.05rem] w-[1.05rem]" fillVar={fillVar} />
-        </span>
+        <SubjectGlyph icon={subject.icon} className="h-[1.05rem] w-[1.05rem] shrink-0" fillVar={fillVar} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">

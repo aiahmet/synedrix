@@ -92,14 +92,14 @@ function ChapterRow({
     <li className="py-3 first:pt-0 last:pb-0">
       <Link
         href={`/subjects/${subjectSlug}/${chapter.slug}`}
-        className="group flex items-center gap-4 rounded-lg px-1 py-1 outline-none transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring"
+        className="group flex items-center gap-4 rounded-lg px-1 py-1 outline-none transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40"
       >
         <span
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border font-mono text-[11px] tabular-nums",
+            "font-mono text-[11px] tabular-nums",
             isEmpty
-              ? "border-border bg-surface text-muted-foreground"
-              : "border-accent-border/50 bg-accent-subtle/40 text-accent"
+              ? "text-muted-foreground"
+              : "text-accent"
           )}
           aria-hidden
         >

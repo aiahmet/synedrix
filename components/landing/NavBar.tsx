@@ -10,30 +10,6 @@ import { navLinks } from "@/components/landing/data";
 import { ArrowRight, List as ListIcon, X } from "@/components/landing/icons";
 import { cn } from "@/lib/utils/cn";
 
-/**
- * Floating pill navbar.
- *
- * Engineering notes:
- *   - IntersectionObserver drives the "scrolled" state instead of a
- *     scroll listener: zero per-frame work, no mobile jank.
- *   - The body scroll lock runs only while the mobile menu is open,
- *     and the cleanup runs on unmount so we never leave the body
- *     in a locked state.
- *   - Reduced-motion users skip every spring transition.
- *   - Focus moves to the first link when the menu opens and is
- *     sent back to the trigger when it closes, satisfying WAI-ARIA
- *     disclosure semantics.
- *   - The pill lives in a max-w-6xl centered floating container,
- *     so it never stretches edge-to-edge like a generic CMS bar.
- *   - The brand mark is logo + wordmark only. No version label, no
- *     pill chip: the SYNEDRIX-FRONTEND-STYLE rulebook bans version
- *     labels (`v1`, `BETA`, `INVITE-ONLY`) and pill/track chips on
- *     marketing surfaces. The MIT line on the Footer carries the
- *     release signal.
- *   - Brand logo container uses `rounded-md` so the nav and the
- *     AuthShell `SX` mark share one small-element shape scale.
- *     Shape consistency wins over a one-off visual flourish.
- */
 export function NavBar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -57,8 +33,6 @@ export function NavBar() {
     if (!mobileOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    // Snapshot the trigger; React may swap the ref by the time the
-    // cleanup runs.
     const triggerSnapshot = triggerRef.current;
     const firstLink =
       mobileListRef.current?.querySelector<HTMLAnchorElement>("a");
@@ -73,13 +47,6 @@ export function NavBar() {
 
   return (
     <>
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-accent-foreground"
-      >
-        Skip to content
-      </a>
-
       <div ref={sentinelRef} className="absolute top-0 h-px w-px" aria-hidden />
 
       <header className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-4 sm:pt-6">
@@ -89,10 +56,10 @@ export function NavBar() {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           aria-label="Primary"
           className={cn(
-            "flex w-full max-w-6xl items-center justify-between rounded-full border px-3 py-2 transition-[background-color,border-color,box-shadow] duration-500 sm:px-5",
+            "flex w-full max-w-4xl items-center justify-between rounded-full border px-3 py-2 transition-[background-color,border-color,box-shadow] duration-500 sm:px-5",
             scrolled
-              ? "border-border bg-surface-elevated/80 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_32px_-12px_rgba(0,0,0,0.08)] backdrop-blur-2xl"
-              : "border-border-faint bg-surface-elevated/60 backdrop-blur-xl"
+              ? "border-border bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)] dark:border-border/60"
+              : "border-transparent bg-transparent"
           )}
         >
           <Link
@@ -117,7 +84,7 @@ export function NavBar() {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="inline-flex h-8 items-center rounded-md px-3 text-[13px] font-medium text-muted-foreground outline-none transition-colors duration-300 hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:bg-surface focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-foreground/40"
+                  className="inline-flex h-8 items-center rounded-md px-3 text-[13px] font-medium text-muted-foreground outline-none transition-colors duration-300 hover:bg-muted-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:bg-muted-foreground/5 focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-foreground/40"
                 >
                   {link.label}
                 </Link>
@@ -131,13 +98,13 @@ export function NavBar() {
               href="/sign-in"
               className="hidden h-8 items-center rounded-md px-3 text-[13px] font-medium text-muted-foreground outline-none transition-colors duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40 sm:inline-flex"
             >
-              Sign in
+              Anmelden
             </Link>
             <Link
               href="/sign-up"
               className="group ml-0.5 hidden h-8 items-center gap-1.5 rounded-md bg-accent pl-4 pr-3 text-[13px] font-medium text-accent-foreground outline-none shadow-none transition-colors duration-300 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40 sm:inline-flex"
             >
-              Start learning
+              Loslegen
               <ArrowRight
                 className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
                 weight="bold"
@@ -151,7 +118,7 @@ export function NavBar() {
               aria-expanded={mobileOpen}
               aria-controls="mobile-menu"
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
-              className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:bg-surface focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-foreground/40 md:hidden"
+              className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:bg-muted-foreground/5 focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-foreground/40 md:hidden"
             >
               <AnimatePresence mode="wait" initial={false}>
                 {mobileOpen ? (
@@ -214,7 +181,7 @@ export function NavBar() {
                     <Link
                       href={link.href}
                       onClick={closeMobile}
-                      className="block rounded-md px-6 py-3 text-xl font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:outline-none focus-visible:bg-surface focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-foreground/40"
+                      className="block rounded-md px-6 py-3 text-xl font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:outline-none focus-visible:bg-muted-foreground/5 focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-foreground/40"
                     >
                       {link.label}
                     </Link>
@@ -231,16 +198,16 @@ export function NavBar() {
                 <Link
                   href="/sign-in"
                   onClick={closeMobile}
-                  className="rounded-md border border-border px-7 py-2.5 text-sm font-medium text-foreground outline-none transition-colors hover:bg-surface focus-visible:outline-none focus-visible:border-foreground focus-visible:ring-1 focus-visible:ring-foreground/40"
+                  className="rounded-md border border-border px-7 py-2.5 text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted-foreground/5 focus-visible:outline-none focus-visible:border-foreground focus-visible:ring-1 focus-visible:ring-foreground/40"
                 >
-                  Sign in
+                  Anmelden
                 </Link>
                 <Link
                   href="/sign-up"
                   onClick={closeMobile}
                   className="group inline-flex items-center gap-1.5 rounded-md bg-accent px-7 py-2.5 text-sm font-medium text-accent-foreground shadow-none outline-none transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40"
                 >
-                  Start learning
+                  Loslegen
                   <ArrowRight
                     className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
                     weight="bold"

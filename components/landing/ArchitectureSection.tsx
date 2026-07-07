@@ -42,7 +42,7 @@ export function ArchitectureSection() {
     <Section
       id="architecture"
       ariaLabelledBy="architecture-title"
-      className="py-24 sm:py-32"
+      className="bg-surface py-24 sm:py-32"
     >
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 16 }}

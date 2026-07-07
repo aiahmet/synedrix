@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,33 +12,29 @@ import {
   ClockCounterClockwise,
   UserCircle,
   Target,
+  Calendar,
 } from "@phosphor-icons/react/dist/ssr";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ActiveSessionIndicator } from "@/components/layout/ActiveSessionIndicator";
 import { NavTutorBadge } from "@/components/layout/NavTutorBadge";
+import { GlobalSearch } from "@/components/layout/GlobalSearch";
+import { TopBarTimer } from "@/components/layout/TopBarTimer";
 import { cn } from "@/lib/utils/cn";
 import { api } from "@/convex/_generated/api";
 
-/**
- * The primary app nav. Plan §1.4: `/my-topics` (user-
- * authored topics) is now reachable from the main
- * chrome. The `UserCircle` icon is the same one used
- * on `components/dashboard/TopicList.tsx` for the
- * "MY TOPIC" badge, so the surface language is
- * consistent.
- */
 const navItems: ReadonlyArray<{
   readonly href: string;
   readonly label: string;
   readonly Icon: typeof SquaresFour;
   readonly withBadge?: "tutor";
 }> = [
-  { href: "/dashboard", label: "Dashboard", Icon: SquaresFour },
-  { href: "/subjects", label: "Subjects", Icon: BookOpen },
-  { href: "/review", label: "Review", Icon: ClockCounterClockwise },
-  { href: "/tutor", label: "Tutor", Icon: ChatCircleText, withBadge: "tutor" },
-  { href: "/my-topics", label: "Your topics", Icon: UserCircle },
-  { href: "/practice", label: "Practice", Icon: Target },
+  { href: "/dashboard", label: "Cockpit", Icon: SquaresFour },
+  { href: "/subjects", label: "Fächer", Icon: BookOpen },
+  { href: "/planner", label: "Planer", Icon: Calendar },
+  { href: "/review", label: "Wiederholungen", Icon: ClockCounterClockwise },
+  { href: "/tutor", label: "KI-Tutor", Icon: ChatCircleText, withBadge: "tutor" },
+  { href: "/my-topics", label: "Deine Themen", Icon: UserCircle },
+  { href: "/practice", label: "Übungsarena", Icon: Target },
 ];
 
 export default async function AppLayout({
@@ -49,46 +45,13 @@ export default async function AppLayout({
   const { userId, getToken } = await auth();
   if (!userId) redirect("/sign-in");
 
-  // Read the pathname exactly once. `headers()` is a
-  // per-request dynamic API, so two reads in the same
-  // render are wasteful at minimum (and may emit warnings
-  // in some Next.js builds). The pathname branches the
-  // onboarding gate AND the chrome decision below.
+  const user = await currentUser();
+  const firstName = user?.firstName ?? "Schüler";
+
   const headerList = await headers();
   const pathname = headerList.get("x-pathname") ?? "";
   const isOnboardingPath = pathname.startsWith("/onboarding");
 
-  // Onboarding gate. The (app) layout owns the redirect
-  // graph: every protected page that is not `/onboarding`
-  // redirects in when the user is not yet onboarded; the
-  // `/onboarding` page redirects out when they are. The two
-  // conditions are mutually exclusive so there is no
-  // redirect loop.
-  //
-  // We deliberately fail-open if Convex is unreachable:
-  // when we cannot decide, we let the request continue
-  // (rather than over-redirecting) so a Convex outage does
-  // not trap the user. The `/onboarding/page.tsx` mirrors
-  // the out-redirect so the loop stays symmetric.
-  //
-  // Two notes on the implementation:
-  //
-  //  1. **Forward the Clerk JWT.** `fetchQuery` from
-  //     `convex/nextjs` does not automatically forward auth
-  //     tokens when called from server components. We mint
-  //     a Clerk JWT against the `convex` template (the same
-  //     one `convex/auth.config.ts` validates) and pass it
-  //     as the third argument. Without the token the query
-  //     sees no identity and `getOnboardingStatus` returns
-  //     `{signedIn: false}`, blocking the redirect.
-  //  2. **Move `redirect()` out of the try/catch.**
-  //     `next/navigation`'s `redirect` throws an internal
-  //     `NEXT_REDIRECT` error that Next.js uses to perform
-  //     the redirect. Wrapping it in a plain `try { ...
-  //     redirect(...) } catch {}` silently swallows that
-  //     signal — the redirect is lost and the request
-  //     renders the protected page anyway. We set a flag
-  //     and call `redirect()` outside the try block.
   let shouldRedirectToOnboarding = false;
   if (!isOnboardingPath) {
     try {
@@ -137,33 +100,54 @@ export default async function AppLayout({
             </div>
 
             <nav className="flex-1 space-y-0.5 p-2">
-              {navItems.map(({ href, label, Icon, withBadge }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground"
-                >
-                  <span className="relative">
-                    <Icon className="h-5 w-5" weight="duotone" />
-                    {withBadge === "tutor" && <NavTutorBadge variant="desktop" />}
-                  </span>
-                  <span>{label}</span>
-                </Link>
-              ))}
+              {navItems.map(({ href, label, Icon, withBadge }) => {
+                const active = href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                      active
+                        ? "bg-foreground/[0.05] text-foreground font-semibold"
+                        : "text-muted-foreground hover:bg-surface-elevated hover:text-foreground"
+                    )}
+                  >
+                    <span className="relative">
+                      <Icon
+                        className={cn(
+                          "h-5 w-5 transition-colors",
+                          active ? "text-accent" : "text-muted-foreground/80"
+                        )}
+                        weight="duotone"
+                      />
+                      {withBadge === "tutor" && <NavTutorBadge variant="desktop" />}
+                    </span>
+                    <span>{label}</span>
+                  </Link>
+                );
+              })}
             </nav>
 
             <div className="border-t border-border p-3">
-              <div className="flex items-center gap-3 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-3 rounded-lg px-2.5 py-1.5 hover:bg-surface-elevated/40 transition-colors">
                 <UserButton
                   appearance={{
                     elements: {
-                      avatarBox: "h-8 w-8",
+                      avatarBox: "h-7 w-7",
                       userButtonTrigger:
-                        "focus:ring-2 focus:ring-ring rounded-full",
+                        "focus:ring-1 focus:ring-foreground/40 rounded-full",
                     },
                   }}
                 />
-                <span className="text-sm text-muted-foreground">Account</span>
+                <div className="flex flex-col min-w-0 leading-none">
+                  <span className="text-[12.5px] font-semibold text-foreground truncate">
+                    {firstName}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                    Konto
+                  </span>
+                </div>
               </div>
             </div>
           </aside>
@@ -173,13 +157,11 @@ export default async function AppLayout({
             {/* Top bar */}
             <header className="flex h-14 items-center justify-between border-b border-border bg-surface px-6">
               <span className="text-sm text-muted-foreground">
-                Your personal learning operating system
+                Dein persönliches Lern-Betriebssystem
               </span>
               <div className="flex items-center gap-3">
-                {/* Plan §3.1: a global "Resume" indicator
-                    that mounts in the top bar. Hidden
-                    when the user has no in-progress
-                    session or practice run. */}
+                <GlobalSearch />
+                <TopBarTimer />
                 <ActiveSessionIndicator variant="desktop" />
                 <ThemeToggle />
                 <div className="md:hidden">
@@ -200,40 +182,40 @@ export default async function AppLayout({
             </main>
           </div>
 
-          {/* Mobile bottom tab bar (md:hidden). Fixed at the
-              bottom of the viewport with safe-area padding for
-              iOS home-indicator devices. The bar mirrors the
-              desktop sidebar's three primary destinations. */}
+          {/* Mobile bottom tab bar (md:hidden) */}
           <nav
             aria-label="Primary"
             className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-surface-elevated/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur-xl md:hidden"
           >
-            {navItems.map(({ href, label, Icon, withBadge }) => (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "group flex min-w-[64px] flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-elevated"
-                )}
-              >
-                <span className="relative">
-                  <Icon className="h-5 w-5" weight="duotone" />
-                  {withBadge === "tutor" && <NavTutorBadge variant="mobile" />}
-                </span>
-                <span>{label}</span>
-              </Link>
-            ))}
-            {/* Plan §3.1: a Resume slot in the mobile
-                bottom bar. Rendered after the four
-                primary nav items so it does not crowd
-                them — a 5th cell on a 320px viewport is
-                still legible because the existing
-                `min-w-[64px]` slot leaves room. The
-                `ml-auto` would push it right but the
-                fixed-position bar uses `justify-around`,
-                so we render it inline. */}
+            {navItems.map(({ href, label, Icon, withBadge }) => {
+              const active = href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "group flex min-w-[60px] flex-col items-center gap-0.5 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-elevated",
+                    active
+                      ? "text-foreground font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className="relative">
+                    <Icon
+                      className={cn(
+                        "h-5 w-5 transition-colors",
+                        active ? "text-accent" : "text-muted-foreground/80"
+                      )}
+                      weight="duotone"
+                    />
+                    {withBadge === "tutor" && <NavTutorBadge variant="mobile" />}
+                  </span>
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
             <ActiveSessionIndicator variant="mobile" />
-            <div className="flex min-w-[64px] flex-col items-center gap-0.5 py-1.5">
+            <div className="flex min-w-[60px] flex-col items-center gap-0.5 py-1.5">
               <UserButton
                 appearance={{
                   elements: {
@@ -243,8 +225,8 @@ export default async function AppLayout({
                   },
                 }}
               />
-              <span className="text-[10.5px] font-medium text-muted-foreground">
-                Account
+              <span className="text-[10px] font-medium text-muted-foreground">
+                Konto
               </span>
             </div>
           </nav>
@@ -254,18 +236,6 @@ export default async function AppLayout({
   );
 }
 
-/**
- * OnboardingChrome.
- *
- * The stripped outer frame rendered when the user is on
- * `/onboarding`. Just the logo on the left and a ThemeToggle
- * on the right, no nav, no sidebar. The whole vertical
- * viewport is dedicated to the onboarding content so the
- * full-screen focus experience reads as one composition.
- *
- * Server-rendered (no client behavior) so it stays under
- * the layout-level Suspense boundary cleanly.
- */
 function OnboardingChrome({ children }: { readonly children: React.ReactNode }) {
   return (
     <div className="flex w-full flex-1 flex-col">

@@ -31,7 +31,7 @@ export function NavTutorBadge({
   readonly className?: string;
   readonly variant?: "desktop" | "mobile";
 }) {
-  const total = useQuery(api.tutor.getTutorUnreadTotal, {});
+  const total = useQuery(api.tutorComposer.getTutorUnreadTotal, {});
   if (total === undefined || total === null || total <= 0) return null;
   return (
     <span

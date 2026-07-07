@@ -167,12 +167,12 @@ export interface FaqItem {
 // ---------------------------------------------------------------------------
 
 export const navLinks: readonly NavLink[] = [
-  { href: "#surfaces", label: "Surfaces" },
-  { href: "#loop", label: "Loop" },
-  { href: "#subjects", label: "Subjects" },
-  { href: "#architecture", label: "Architecture" },
-  { href: "#stack", label: "Stack" },
-  { href: "#roadmap", label: "Roadmap" },
+  { href: "#loop", label: "Ablauf" },
+  { href: "#platform", label: "Systeme" },
+  { href: "#adaptive", label: "Adaptiv" },
+  { href: "#subjects-carousel", label: "Fächer" },
+  { href: "#comparison", label: "Vergleich" },
+  { href: "#faq", label: "Fragen" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -763,44 +763,44 @@ export const roadmapPhases: readonly RoadmapPhase[] = [
 
 export const faqItems: readonly FaqItem[] = [
   {
-    question: "Is this ready for multiple students or classrooms?",
+    question: "Ist das System für mehrere Schüler oder Klassen bereit?",
     answer:
-      "Not in v1. Single-user only. The schema has roles for ParentObserver, Tutor, and Admin future-proofed, but auth, billing, and the class shell are not built yet.",
+      "Nicht in v1. Nur für Einzelbenutzer. Das Schema ist für ParentObserver, Tutor und Admin zukunftssicher ausgelegt, aber Authentifizierung, Abrechnung und Klassenschalen sind noch nicht implementiert.",
   },
   {
-    question: "What models does the AI tutor actually use?",
+    question: "Welche Modelle nutzt der KI-Tutor tatsächlich?",
     answer:
-      "OpenRouter routes per task: fast models for chat, stronger reasoning models for explanations, low-cost models for flashcards and summaries, language-strong models for French and German writing feedback. The mapping is in src/lib/ai/models.ts.",
+      "OpenRouter leitet je nach Aufgabe weiter: Schnelle Modelle für den Chat, stärkere Reasoning-Modelle für Erklärungen, kostengünstige Modelle für Karteikarten und Zusammenfassungen sowie sprachlich stärkere Modelle für Feedback zu französischen und englischen Texten. Die Zuordnung finden Sie in src/lib/ai/models.ts.",
   },
   {
-    question: "How does the spaced repetition schedule?",
+    question: "Wie funktioniert die Terminierung der Spaced-Repetition?",
     answer:
-      "Per-card ease, interval, and last result at FlashcardReview. Struggled items return tomorrow, mastered items fade into maintenance. Mistake entries carry their own reviewAt so the journal and the cards share one queue.",
+      "Abhängig von Schwierigkeit, Intervall und letztem Ergebnis pro Karteikarte in FlashcardReview. Problemelemente kehren morgen zurück, gemeisterte Themen gehen in den Erhaltungsmodus über. Fehlereinträge haben ihr eigenes reviewAt, sodass Fehlerjournal und Karteikarten eine gemeinsame Warteschlange nutzen.",
   },
   {
-    question: "Why not just use Anki or Quizlet?",
+    question: "Warum nicht einfach Anki oder Quizlet nutzen?",
     answer:
-      "They do not know what the AI tutor just explained or what the practice engine just tested. No concept of mastery, no mistake journal, no rubric-graded writing feedback. Synedrix is the system they would live inside.",
+      "Sie wissen nicht, was der KI-Tutor gerade erklärt oder was die Practice Engine gerade getestet hat. Es gibt kein Konzept von Lernfortschritt, kein Fehlerjournal und kein kriterienbasiertes Schreib-Feedback. Synedrix ist das System, in dem sie leben würden.",
   },
   {
-    question: "Does it work for languages other than German?",
+    question: "Funktioniert es auch für andere Sprachen außer Deutsch?",
     answer:
-      "Yes. French, German, and English each have subject-specific workflows. Writing feedback runs through a rubric-aware model. Explain-this-in-simpler-French is a standing tutor mode.",
+      "Ja. Französisch, Deutsch und Englisch haben jeweils fachspezifische Abläufe. Das Schreib-Feedback läuft über ein kriterienbewusstes Modell. 'Erkläre dies auf einfacherem Französisch' ist ein standardmäßiger Tutor-Modus.",
   },
   {
-    question: "Can I self-host it?",
+    question: "Kann ich es selbst hosten?",
     answer:
-      "Convex and Clerk are managed services, so a true self-host requires swapping both. The rest of the stack runs on your own infrastructure with environment changes only.",
+      "Convex und Clerk sind verwaltete Dienste, daher erfordert ein echtes Self-Hosting den Austausch beider. Der Rest des Stacks läuft auf Ihrer eigenen Infrastruktur nur mit Anpassungen der Umgebungsvariablen.",
   },
   {
-    question: "Where does my data live?",
+    question: "Wo liegen meine Daten?",
     answer:
-      "Canonical curriculum content is shared and read-only. Your progress, sessions, notes, mistakes, and tutor conversations are exclusively yours and never used for training any model.",
+      "Inhaltliche Lehrpläne sind freigegeben und schreibgeschützt. Ihr Lernfortschritt, Ihre Sitzungen, Notizen, Fehler und Tutor-Gespräche gehören ausschließlich Ihnen und werden niemals zum Trainieren von Modellen verwendet.",
   },
   {
-    question: "How do I contribute?",
+    question: "Wie kann ich beitragen?",
     answer:
-      "Fork, branch, commit with a conventional commit message, and open a pull request. Bug fixes ship fast. New features ship in conversation first. AI prompting changes need an AiGeneration row proving schema validation still passes.",
+      "Forken, Branch erstellen, mit einer standardisierten Commit-Nachricht committen und einen Pull-Request öffnen. Fehlerbehebungen werden schnell übernommen. Neue Funktionen werden zuerst besprochen.",
   },
 ] as const;
 
@@ -813,33 +813,33 @@ export const footerLinkColumns: readonly {
   readonly links: readonly { readonly label: string; readonly href: string }[];
 }[] = [
   {
-    heading: "Product",
+    heading: "Produkt",
     links: [
-      { label: "Surfaces", href: "#surfaces" },
-      { label: "Learning loop", href: "#loop" },
-      { label: "Subjects", href: "#subjects" },
-      { label: "Architecture", href: "#architecture" },
+      { label: "Bereiche", href: "#surfaces" },
+      { label: "Lernkreislauf", href: "#loop" },
+      { label: "Fächer", href: "#subjects" },
+      { label: "Architektur", href: "#architecture" },
       { label: "Roadmap", href: "#roadmap" },
     ],
   },
   {
-    heading: "Account",
+    heading: "Konto",
     links: [
-      { label: "Sign in", href: "/sign-in" },
-      { label: "Sign up", href: "/sign-up" },
-      { label: "Privacy", href: "https://github.com/aiahmet/synedrix/blob/main/LICENSE" },
-      { label: "Terms", href: "https://github.com/aiahmet/synedrix/blob/main/CONTRIBUTING.md" },
+      { label: "Anmelden", href: "/sign-in" },
+      { label: "Registrieren", href: "/sign-up" },
+      { label: "Datenschutz", href: "https://github.com/aiahmet/synedrix/blob/main/LICENSE" },
+      { label: "Nutzungsbedingungen", href: "https://github.com/aiahmet/synedrix/blob/main/CONTRIBUTING.md" },
     ],
   },
   {
-    heading: "Open source",
+    heading: "Open Source",
     links: [
       { label: "GitHub", href: "https://github.com/aiahmet/synedrix" },
-      { label: "Report a bug", href: "https://github.com/aiahmet/synedrix/issues" },
-      { label: "Discussions", href: "https://github.com/aiahmet/synedrix/discussions" },
-      { label: "MIT license", href: "https://github.com/aiahmet/synedrix/blob/main/LICENSE" },
+      { label: "Fehler melden", href: "https://github.com/aiahmet/synedrix/issues" },
+      { label: "Diskussionen", href: "https://github.com/aiahmet/synedrix/discussions" },
+      { label: "MIT-Lizenz", href: "https://github.com/aiahmet/synedrix/blob/main/LICENSE" },
     ],
-  },
+  }
 ] as const;
 
 // ---------------------------------------------------------------------------

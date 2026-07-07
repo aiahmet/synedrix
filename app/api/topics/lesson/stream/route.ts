@@ -122,21 +122,24 @@ export async function POST(req: NextRequest) {
       const finalObject = await result.object;
       if (req.signal.aborted) return;
 
+      let lessonData;
       const parseResult = lessonSchema.safeParse(finalObject);
       if (!parseResult.success) {
-        // Plan §11: Zod fails on lesson → write a
-        // degraded row (the helper already wrote a
-        // `schemaValid: false` telemetry row). The user
-        // can hit Regenerate from the lesson page to
-        // retry. We do not insert here — that would
-        // defeat the per-version immutable-history
-        // guarantee on `topicLessons`. Skip; the
-        // client UI shows the degraded message.
         console.error(
-          "lesson stream: final object failed Zod, skipping commit",
+          "lesson stream: final object failed Zod, creating degraded placeholder:",
           parseResult.error.message
         );
-        return;
+        lessonData = {
+          sections: [
+            {
+              heading: "Generierung fehlgeschlagen",
+              body: `Die strukturierte Antwort der KI entsprach nicht den Qualitätskriterien. Bitte klicke unten auf „Regenerieren“, um das Thema neu zu erstellen. Details: ${parseResult.error.message}`,
+            },
+          ],
+          glossary: [],
+        };
+      } else {
+        lessonData = parseResult.data;
       }
 
       // Capture the real model id here. The `streamLesson`
@@ -157,7 +160,7 @@ export async function POST(req: NextRequest) {
         objectives: input.objectives ?? [],
         ...(input.gradeLevel ? { gradeLevel: input.gradeLevel } : {}),
         model: chatModel(),
-        lesson: parseResult.data,
+        lesson: lessonData,
       });
     } catch (err) {
       console.error("lesson stream: background commit failed", err);

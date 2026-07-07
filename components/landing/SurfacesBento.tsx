@@ -91,9 +91,28 @@ function CompactPreview({
 }
 
 /**
+ * Cell background variants for visual diversity.
+ * Maps well-known surface titles to a background class that
+ * differs from the default `bg-surface` so the bento has
+ * at least 2-3 cells with real visual variation (design-taste
+ * skill section 4.7 - Bento Background Diversity rule).
+ *
+ *   - default:      bg-surface (the current single uniform tint)
+ *   - hero-cell:    subtle gradient for the anchor cell
+ *   - tint-accent:  very quiet accent-subtle wash
+ *   - tint-warm:    quiet warm tint (muted-foreground/5 via surface-sunken)
+ */
+const CELL_BG: Record<string, string> = {
+  default: "bg-surface",
+  "The Cockpit": "bg-gradient-to-b from-accent-subtle/20 to-surface",
+  "Practice Arena": "bg-surface-elevated",
+  "Mistake Journal": "bg-surface-elevated",
+};
+
+/**
  * Per-surface tile.
  *
- * Single-layer contract (style guide §1, §5):
+ * Single-layer contract (style guide section 1, section 5):
  *   - One 1px border on the cell. Nothing nested inside.
  *   - The icon sits at 20px in muted-foreground, no chip.
  *   - All cells use the same H3 size and weight. The hero
@@ -114,10 +133,12 @@ function SurfaceTile({
   readonly isHero: boolean;
   readonly preview: ReactNode;
 }) {
+  const bgClass = CELL_BG[surface.title] ?? CELL_BG.default;
   return (
     <article
       className={
-        "flex flex-col rounded-2xl border border-border bg-surface p-6 sm:p-7 " +
+        "flex flex-col rounded-2xl border border-border p-6 sm:p-7 " +
+        bgClass + " " +
         surface.span
       }
     >
@@ -256,7 +277,7 @@ export function SurfacesBento() {
     <Section
       id="surfaces"
       ariaLabelledBy="surfaces-title"
-      className="py-24 sm:py-32"
+      className="bg-surface py-24 sm:py-32"
     >
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 16 }}

@@ -321,42 +321,46 @@ export function PracticeRunner({
 
   if (phase === "loading") {
     return (
-      <div className="rounded-xl border border-border bg-background p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)]">
+      <CockpitCard>
         <div className="h-4 w-40 animate-pulse rounded bg-muted/30" />
-      </div>
+      </CockpitCard>
     );
   }
 
   if (phase === "error") {
     return (
-      <div className="rounded-xl border border-border bg-background p-7 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)]">
-        <p className="text-[12.5px] text-muted-foreground">
-          {errorMsg ?? "An error occurred."}
-        </p>
-      </div>
+      <CockpitCard>
+        <div className="flex flex-col items-center gap-3 py-4 text-center">
+          <p className="text-[12.5px] text-muted-foreground">
+            {errorMsg ?? "An error occurred."}
+          </p>
+        </div>
+      </CockpitCard>
     );
   }
 
   const currentItem = orderedItems[currentIndex];
   if (!currentItem) {
     return (
-      <div className="rounded-xl border border-border bg-background p-7 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)]">
-        <p className="text-[13px] text-foreground">No more questions.</p>
-        <button
-          type="button"
-          onClick={() => onFinishRun()}
-          className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-        >
-          View summary
-        </button>
-      </div>
+      <CockpitCard>
+        <div className="flex flex-col items-center gap-4 py-4 text-center">
+          <p className="text-[13px] text-foreground">No more questions.</p>
+          <button
+            type="button"
+            onClick={() => onFinishRun()}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+          >
+            View summary
+          </button>
+        </div>
+      </CockpitCard>
     );
   }
 
   return (
     <div className="flex flex-col gap-5">
       {isTimedMode && timeRemaining !== null && (
-        <div className="flex items-center gap-2 rounded-full border border-border bg-surface-elevated px-3 py-1.5 self-start">
+        <div className="flex items-center gap-2 self-start rounded-md border border-border bg-surface-elevated px-3 py-1.5">
           <Timer className="h-3.5 w-3.5 text-muted-foreground" weight="duotone" />
           <span
             className={cn(
@@ -372,7 +376,7 @@ export function PracticeRunner({
       )}
 
       {isExamMode && (
-        <div className="rounded-full border border-border bg-surface-elevated px-3 py-1.5 self-start">
+        <div className="self-start rounded-md border border-border bg-surface-elevated px-3 py-1.5">
           <span className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-muted-foreground">
             Exam mode — no feedback until the end
           </span>
@@ -467,7 +471,7 @@ export function PracticeRunner({
           <button
             type="button"
             onClick={() => onFinishRun()}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface-elevated px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-surface-elevated px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface"
           >
             <X className="h-3.5 w-3.5" weight="bold" />
             Finish
@@ -479,7 +483,7 @@ export function PracticeRunner({
             type="button"
             onClick={onSubmit}
             disabled={currentAnswer.trim().length === 0}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Sparkle className="h-3.5 w-3.5" weight="duotone" />
             {isExamMode ? "Next" : "Submit answer"}
@@ -490,7 +494,7 @@ export function PracticeRunner({
           <button
             type="button"
             onClick={onNext}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
           >
             {currentIndex + 1 < total ? (
               <>
@@ -549,7 +553,7 @@ function ItemInput({
                 disabled={disabled}
                 onClick={() => setValue(opt)}
                 className={cn(
-                  "flex h-auto min-h-[3rem] items-start gap-3 rounded-lg border border-border bg-background px-3.5 py-2.5 text-left text-[13px] leading-relaxed text-foreground transition-colors hover:border-foreground/40 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60",
+                  "flex h-auto min-h-[3rem] items-start gap-3 rounded-md border border-border bg-background px-3.5 py-2.5 text-left text-[13px] leading-relaxed text-foreground transition-colors hover:border-foreground/40 hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60",
                   selected &&
                     "border-accent bg-accent-subtle/40 text-foreground"
                 )}
@@ -838,7 +842,7 @@ function GradeCard({
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em]"
+            className="inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em]"
             style={{
               backgroundColor: `color-mix(in srgb, ${verdictColor} 12%, transparent)`,
               borderColor: `color-mix(in srgb, ${verdictColor} 36%, transparent)`,
@@ -848,7 +852,7 @@ function GradeCard({
             {verdictLabel}
           </span>
           {grade.degraded && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-subject-french/40 bg-subject-french/10 px-2.5 py-1 text-[10.5px] font-medium uppercase tracking-[0.14em] text-subject-french">
+            <span className="inline-flex items-center gap-1 rounded-md border border-subject-french/40 bg-subject-french/10 px-2.5 py-1 text-[10.5px] font-medium uppercase tracking-[0.14em] text-subject-french">
               <WarningCircle className="h-3 w-3" weight="bold" />
               fallback
             </span>

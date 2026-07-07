@@ -63,15 +63,9 @@ export function SubjectBreakdown() {
               delay: i * 0.05,
               ease: [0.16, 1, 0.3, 1],
             }}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-surface p-1.5 transition-colors duration-300 hover:border-border/70"
+            className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 transition-shadow duration-300 hover:shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_1px_0_0_rgb(255_255_255_/_0.05),0_8px_24px_-12px_rgba(0,0,0,0.45)]"
           >
-            <div className="relative flex h-full flex-col rounded-[14px] border border-border/60 bg-surface-elevated p-6 inner-highlight">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[var(--halo-3)] opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-100"
-              />
-
-              <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
                 <span
                   className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-white"
                   style={{ backgroundColor: `var(--${subject.tailwindColor})` }}
@@ -118,7 +112,6 @@ export function SubjectBreakdown() {
                   </p>
                 </div>
               </div>
-            </div>
           </motion.li>
         ))}
       </ul>

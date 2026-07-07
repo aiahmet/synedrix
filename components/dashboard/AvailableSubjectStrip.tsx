@@ -7,7 +7,6 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
-  Check,
   Plus,
   SubjectGlyph,
 } from "@/components/landing/icons";
@@ -94,16 +93,7 @@ function SubjectChip({
 
   return (
     <li className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-      <span
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border"
-        style={{
-          backgroundColor: `color-mix(in srgb, ${fillVar} 12%, transparent)`,
-          borderColor: `color-mix(in srgb, ${fillVar} 28%, transparent)`,
-        }}
-        aria-hidden
-      >
-        <SubjectGlyph icon={subject.icon} className="h-[0.95rem] w-[0.95rem]" fillVar={fillVar} />
-      </span>
+      <SubjectGlyph icon={subject.icon} className="h-[0.95rem] w-[0.95rem] shrink-0" fillVar={fillVar} />
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-[12.5px] font-semibold tracking-tight text-foreground">
@@ -118,8 +108,7 @@ function SubjectChip({
       </div>
 
       {subject.enrolled ? (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent-border/50 bg-accent-subtle/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-accent">
-          <Check className="h-2.5 w-2.5" weight="bold" />
+        <span className="shrink-0 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-accent">
           Enrolled
         </span>
       ) : (

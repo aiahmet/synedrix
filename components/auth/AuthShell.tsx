@@ -1,36 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils/cn";
 import { ArrowRight } from "@/components/landing/icons";
-
-/**
- * AuthShell.
- *
- * Two-pane split layout shared by /sign-in and /sign-up.
- *
- * Design discipline (plan §0 — anti-slop auth):
- *   - No halo blobs, no radial dot grids, no decorative overlay.
- *     The page is pure typography on a single background.
- *   - The two panes share `bg-background` as the base, but the
- *     brand aside carries a subtle `bg-surface-elevated/30` tint
- *     so the page reads as two rooms, not one wide canvas. A
- *     `border-r` on desktop and `border-b` on mobile confirms the
- *     split on systems where the tint is too faint.
- *   - The header is quiet: a brand mark, theme toggle, and a
- *     single line alternate-mode link. No badge, no extras.
- *   - The form sits in an `AuthFormCard` that is a single-layer
- *     rounded surface — no nested decoration, no inner shadow.
- *   - The footer is one line, low contrast. It is functional copy,
- *     not visual decoration.
- *
- * Responsive rules:
- *   - Desktop (>=lg): 6/6 split, brand Aside on the left, the form
- *     section on the right, separated by `border-r`.
- *   - Tablet (<lg): vertically stacked. Brand collapses above,
- *     form below. A `border-b` separates them on stacked viewports.
- *   - Mobile: same as tablet, with reduced horizontal padding.
- */
 
 interface AuthShellProps {
   readonly brandPanel: React.ReactNode;
@@ -57,8 +30,14 @@ export function AuthShell({
           aria-label="Synedrix home"
           className="group flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-[10px] font-bold tracking-tight text-background">
-            SX
+          <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-md">
+            <Image
+              src="/synedrix-logo.png"
+              alt=""
+              fill
+              className="object-cover"
+              sizes="28px"
+            />
           </span>
           <span className="text-[13.5px] font-medium tracking-[-0.005em]">
             Synedrix
@@ -106,22 +85,6 @@ export function AuthShell({
   );
 }
 
-/**
- * Container for the form card. Used by both pages so the form sits
- * inside a single, consistent surface.
- *
- * Anti-slop:
- *   - Single-layer rounded card. No nested `bg-surface-elevated`
- *     wrapper. No `accent/5` overlay ring. No triple-nested chrome.
- *   - Border is the same `--border` token the rest of the app uses,
- *     so the card is part of the design system rather than a
- *     standalone surface.
- *   - Title + description are stacked, left-aligned (editorial),
- *     not centered (generic SaaS).
- *   - Shadow is layered: a tight `0 1px 3px` for edge definition,
- *     a soft `0 8px 24px` for floor shadow. Dark mode flips the
- *     shadow to a faint inner highlight.
- */
 export function AuthFormCard({
   children,
   title,
@@ -146,12 +109,6 @@ export function AuthFormCard({
   );
 }
 
-/**
- * Editorial eyebrow used above the H2 of the brand panel.
- *
- * No pill, no coloured dot, no border. Just stark uppercase
- * typography that the eye reads as a label, not a chip.
- */
 export function AuthEyebrow({
   children,
   className,

@@ -142,7 +142,7 @@ export function SubjectCard({
               {subject.title}
             </h3>
             {subject.enrolled && (
-              <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-accent">
+              <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 <Check className="h-3 w-3" weight="bold" />
                 Enrolled
               </span>

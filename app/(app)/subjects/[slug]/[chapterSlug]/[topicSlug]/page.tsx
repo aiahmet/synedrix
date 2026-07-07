@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { api } from "@/convex/_generated/api";
 import { TopicDetailClient } from "./TopicDetailClient";
+import { CockpitCard } from "@/components/dashboard/CockpitCard";
 import { ArrowLeft, Books } from "@/components/landing/icons";
 
 /**
@@ -112,36 +113,26 @@ function OfflineFallback({
 }) {
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="rounded-2xl border border-border bg-surface-elevated p-1.5 shadow-[var(--shadow-soft)]">
-        <div className="rounded-xl bg-background p-7 text-center sm:p-8">
-          <span
-            className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--subject-physics) 14%, transparent)",
-              color: "var(--subject-physics)",
-            }}
-            aria-hidden
-          >
-            <Books className="h-5 w-5" weight="duotone" />
-          </span>
+      <CockpitCard>
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <Books className="h-6 w-6" style={{ color: "var(--subject-physics)" }} weight="duotone" />
           <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
             Could not load &ldquo;{topicSlug}&rdquo;
           </h2>
-          <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-muted-foreground">
+          <p className="mx-auto max-w-sm text-[12.5px] text-muted-foreground">
             The topic view needs Convex to load the lesson blocks,
             prerequisites, and your progress. Start the dev server
             and the page will appear.
           </p>
           <Link
             href={`/subjects/${subjectSlug}/${chapterSlug}`}
-            className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
+            className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-md bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
           >
             <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
             Back to chapter
           </Link>
         </div>
-      </div>
+      </CockpitCard>
     </div>
   );
 }

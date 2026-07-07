@@ -93,12 +93,8 @@ export function SubjectErrorLog({
           return (
             <span
               key={type}
-              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.12em]"
-              style={{
-                backgroundColor: `color-mix(in srgb, ${meta.color} 8%, transparent)`,
-                borderColor: `color-mix(in srgb, ${meta.color} 22%, transparent)`,
-                color: meta.color,
-              }}
+              className="inline-flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-[0.16em]"
+              style={{ color: meta.color }}
             >
               <GitFork className="h-2.5 w-2.5" weight="bold" />
               {meta.label}
@@ -109,12 +105,12 @@ export function SubjectErrorLog({
           );
         })}
       </div>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col divide-y divide-border/40">
         {mistakes.slice(0, 8).map((m) => {
           return (
             <div
               key={m.id}
-              className="rounded-md border border-border/60 bg-background px-3 py-2.5"
+              className="py-2.5 first:pt-0 last:pb-0"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">

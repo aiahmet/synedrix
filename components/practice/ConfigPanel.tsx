@@ -81,7 +81,7 @@ export function ConfigPanel({
 
   const selectedSubject = enrolled.find((s) => s.id === selectedSubjectId);
 
-  const questionTypesInitialized = useRef(false);
+  const questionTypesInitializedForSlug = useRef<string | null>(null);
   const [questionTypes, setQuestionTypes] = useState<ArenaQuestionType[]>([
     "user_text_answer",
     "mcq",
@@ -94,10 +94,9 @@ export function ConfigPanel({
   ]);
 
   useEffect(() => {
-    if (questionTypesInitialized.current) return;
     const slug = subjectSlug ?? selectedSubject?.slug;
-    if (!slug) return;
-    questionTypesInitialized.current = true;
+    if (!slug || slug === questionTypesInitializedForSlug.current) return;
+    questionTypesInitializedForSlug.current = slug;
     const behavior = getSubjectBehavior(slug);
     const preferred = behavior.preferredQuestionTypes.filter(
       (t): t is ArenaQuestionType =>
@@ -191,7 +190,7 @@ export function ConfigPanel({
                     setSelectedTopicIds(new Set());
                   }}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border border-border px-4 py-3 text-left text-[13px] font-medium transition-colors hover:bg-surface",
+                    "flex items-center gap-3 rounded-md border border-border px-4 py-3 text-left text-[13px] font-medium transition-colors hover:bg-surface",
                     selectedSubjectId === s.id &&
                       "border-accent bg-accent-subtle/40 text-foreground"
                   )}
@@ -222,7 +221,7 @@ export function ConfigPanel({
                     }
                   }}
                   className={cn(
-                    "flex items-start gap-3 rounded-lg border border-border px-4 py-3 text-left transition-colors hover:bg-surface",
+                    "flex items-start gap-3 rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-surface",
                     isActive && "border-accent bg-accent-subtle/40"
                   )}
                 >
@@ -266,7 +265,7 @@ export function ConfigPanel({
                 type="button"
                 onClick={() => setDifficulty(d.value)}
                 className={cn(
-                  "flex items-start gap-3 rounded-lg border border-border px-4 py-3 text-left transition-colors hover:bg-surface",
+                  "flex items-start gap-3 rounded-md border border-border px-4 py-3 text-left transition-colors hover:bg-surface",
                   isActive && "border-accent bg-accent-subtle/40"
                 )}
               >
@@ -325,7 +324,7 @@ export function ConfigPanel({
                           type="button"
                           onClick={() => toggleTopic(topic.id)}
                           className={cn(
-                            "rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors",
+                            "rounded-md border px-3 py-1.5 text-[11.5px] font-medium transition-colors",
                             active
                               ? "border-accent bg-accent-subtle/40 text-accent"
                               : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
@@ -391,7 +390,7 @@ export function ConfigPanel({
                 onClick={() => toggleQuestionType(qt.value)}
                 disabled={active && questionTypes.length <= 1}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors",
+                  "rounded-md border px-3 py-1.5 text-[11.5px] font-medium transition-colors",
                   active
                     ? "border-accent bg-accent-subtle/40 text-accent"
                     : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
@@ -414,7 +413,7 @@ export function ConfigPanel({
             selectedTopicIds.size === 0 ||
             enrolled.length === 0
           }
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-5 text-[12.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Sparkle className="h-3.5 w-3.5" weight="duotone" />
           Start practice

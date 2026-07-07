@@ -5,7 +5,6 @@ import {
   Clipboard,
   Play,
   ArrowRight,
-  GitFork,
 } from "@/components/landing/icons";
 import { formatRelativeDate } from "@/lib/format/relativeDate";
 
@@ -226,14 +225,12 @@ function TestResultRow({
         </div>
         {run.skills.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            {run.skills.slice(0, 4).map((skill) => (
-              <span
-                key={skill}
-                className="inline-flex items-center gap-1 rounded-full border border-border/50 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground"
-              >
-                <GitFork className="h-2 w-2" weight="bold" />
-                {skill}
-              </span>
+            {run.skills.slice(0, 4).map((skill) => (                <span
+                  key={skill}
+                  className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground"
+                >
+                  {skill}
+                </span>
             ))}
             {run.skills.length > 4 && (
               <span className="font-mono text-[9px] tabular-nums text-muted-foreground">

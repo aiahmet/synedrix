@@ -21,16 +21,6 @@ import {
   type GermanLetterGrade,
 } from "@/lib/ai/prompts/grading";
 
-/**
- * /my-topics dashboard tile (v2).
- *
- * Resolves the calling user's Convex `users` row id via
- * a tiny dedicated query (`api.users.getMe`), then
- * passes it to `api.topics.listUserTopicsByOwner`. This
- * avoids the prior "skip" hack that always returned
- * `[]` because the indexed read rejected the placeholder
- * `ownerId` value.
- */
 export default function MyTopicsPage() {
   const me = useQuery(api.users.getMe);
   const owned = useQuery(
@@ -38,16 +28,10 @@ export default function MyTopicsPage() {
     me && me._id ? { ownerId: me._id as Id<"users"> } : "skip"
   );
 
-  // Surface the page once both queries are settled.
   if (me === undefined || owned === undefined) {
     return <Skeleton />;
   }
 
-  // Resolve the calling user via the auth surface
-  // downstream of me/skip. We do not block the page
-  // on `me === null` (rare in dev), but render an
-  // empty state so the layout matches the populated
-  // view.
   if (owned.length === 0) {
     return <EmptyState />;
   }
@@ -56,30 +40,29 @@ export default function MyTopicsPage() {
     <div className="flex flex-col gap-6 sm:gap-7">
       <header className="flex flex-col gap-3">
         <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          / my-topics
+          / meine-themen
         </span>
         <h1 className="text-balance text-[clamp(1.5rem,2vw+0.5rem,1.8rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
-          Your topics
+          Deine Themen
         </h1>
         <p className="max-w-prose text-[13px] leading-relaxed text-muted-foreground">
-          Every topic below was authored by you on top of the canonical
-          curriculum. Tap a row to open the lesson, or hit{" "}
+          Jedes der folgenden Themen wurde von dir zusätzlich zum regulären Lehrplan erstellt. Klicke auf ein Thema, um die Lektion zu öffnen, oder gehe auf
           <Link
             href="/subjects"
             className="ml-1 inline-flex items-center gap-1 text-accent transition-colors hover:text-accent/80"
           >
-            Browse subjects <ArrowRight className="h-3 w-3" weight="bold" />
+            Fächer durchsuchen <ArrowRight className="h-3 w-3" weight="bold" />
           </Link>{" "}
-          to add more canonical subjects to your dashboard.
+          um weitere reguläre Fächer zu deinem Cockpit hinzuzufügen.
         </p>
       </header>
 
       <CockpitCard>
         <CockpitCardHeader
-          label="Owned topics"
+          label="Erstellte Themen"
           trailing={
             <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
-              {owned.length} total
+              {owned.length} insgesamt
             </span>
           }
         />
@@ -113,12 +96,12 @@ export default function MyTopicsPage() {
                         color: "var(--subject-chemistry)",
                       }}
                     >
-                      my topic
+                      Mein Thema
                     </span>
                     {t.latestLesson && (
                       <span className="font-mono text-[11.5px] tabular-nums text-muted-foreground">
                         v{t.latestLesson.version} ·{" "}
-                        {t.latestLesson.wordCount}w
+                        {t.latestLesson.wordCount} Wörter
                       </span>
                     )}
                   </div>
@@ -128,7 +111,7 @@ export default function MyTopicsPage() {
                       {t.objectives.length > 1 && (
                         <span className="text-muted-foreground/70">
                           {" "}
-                          +{t.objectives.length - 1} more
+                          +{t.objectives.length - 1} weitere
                         </span>
                       )}
                     </p>
@@ -139,13 +122,13 @@ export default function MyTopicsPage() {
                         <Gauge className="h-3 w-3" weight="duotone" />
                         {t.latestRun.status.replace(/_/g, " ")}
                         {t.latestRun.completedAt ? (
-                          <span className="ml-1">· last practiced</span>
+                          <span className="ml-1">· zuletzt geübt</span>
                         ) : null}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
                         <Sparkle className="h-3 w-3" weight="duotone" />
-                        Awaiting first practice
+                        Wartet auf erste Übung
                       </span>
                     )}
                   </div>
@@ -174,7 +157,7 @@ export default function MyTopicsPage() {
                       className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-colors hover:bg-foreground/90"
                     >
                       <Pulse className="h-3 w-3" weight="duotone" />
-                      Start practice
+                      Übung starten
                     </Link>
                   )}
                   <Link
@@ -182,7 +165,7 @@ export default function MyTopicsPage() {
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3 text-[12px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                   >
                     <ArrowRight className="h-3 w-3" weight="bold" />
-                    Open lesson
+                    Lektion öffnen
                   </Link>
                 </div>
               </li>
@@ -210,10 +193,10 @@ function EmptyState() {
     <div className="flex flex-col gap-6 sm:gap-7">
       <header className="flex flex-col gap-3">
         <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          / my-topics
+          / meine-themen
         </span>
         <h1 className="text-balance text-[clamp(1.5rem,2vw+0.5rem,1.8rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
-          Your topics
+          Deine Themen
         </h1>
       </header>
       <CockpitCard>
@@ -230,19 +213,16 @@ function EmptyState() {
             <User className="h-5 w-5" weight="duotone" />
           </span>
           <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
-            No topics authored yet
+            Noch keine eigenen Themen erstellt
           </h2>
           <p className="max-w-md text-[12.5px] text-muted-foreground">
-            Open any chapter and tap <b>Add your own topic</b> to
-            generate a whole-topic lesson from a free-text brief. Your
-            topics land here, and you can run practice runs on each
-            one.
+            Öffne ein beliebiges Kapitel und klicke auf <b>Eigenes Thema hinzufügen</b>, um eine komplette Lektion aus einer kurzen Beschreibung zu generieren. Deine erstellten Themen erscheinen hier und können jederzeit geübt werden.
           </p>
           <Link
             href="/subjects"
             className="mt-1 inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
           >
-            Browse subjects
+            Fächer durchsuchen
             <ArrowRight className="h-3.5 w-3.5" weight="bold" />
           </Link>
         </div>

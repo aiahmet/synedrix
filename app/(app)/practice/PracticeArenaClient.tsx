@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Preloaded, usePreloadedQuery, useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 
@@ -10,6 +10,7 @@ import type { ArenaMode, ArenaQuestionType } from "@/lib/ai/prompts/practiceAren
 import { ConfigPanel } from "@/components/practice/ConfigPanel";
 import { PracticeRunner } from "@/components/practice/PracticeRunner";
 import { SummaryView } from "@/components/practice/SummaryView";
+import { CockpitCard } from "@/components/dashboard/CockpitCard";
 
 export interface GradeResponse {
   readonly attemptId: string | null;
@@ -53,6 +54,10 @@ export function PracticeArenaClient({
   >(undefined);
   const [selectedSubjectSlug, setSelectedSubjectSlug] = useState<string | undefined>(undefined);
   const [autoStartAttempted, setAutoStartAttempted] = useState(false);
+  const preselectedSubjectSlugRef = useRef(preselectedSubjectSlug);
+  useEffect(() => {
+    preselectedSubjectSlugRef.current = preselectedSubjectSlug;
+  }, [preselectedSubjectSlug]);
 
   const handleStart = useCallback(
     async (config: {
@@ -79,8 +84,8 @@ export function PracticeArenaClient({
           const body = await res.json().catch(() => ({}));
           setErrorMsg(
             body.error === "ai_failed"
-              ? "AI generation failed. Try again in a moment."
-              : `Could not start practice (${res.status}).`
+              ? "KI-Generierung fehlgeschlagen. Versuche es gleich noch einmal."
+              : `Übung konnte nicht gestartet werden (${res.status}).`
           );
           setPhase("config");
           return;
@@ -94,7 +99,7 @@ export function PracticeArenaClient({
         setRunId(data.runId);
         setPhase("running");
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Network error");
+        setErrorMsg(err instanceof Error ? err.message : "Netzwerkfehler");
         setPhase("config");
       }
     },
@@ -121,6 +126,7 @@ export function PracticeArenaClient({
         "oral_recall",
       ],
       difficulty: "MEDIUM",
+      subjectSlug: preselectedSubjectSlugRef.current ?? undefined,
     });
   }, [preselectedTopicId, phase, autoStartAttempted, handleStart]);
 
@@ -147,7 +153,7 @@ export function PracticeArenaClient({
         });
 
         if (!res.ok) {
-          setErrorMsg(`Could not retry (${res.status}).`);
+          setErrorMsg(`Wiederholung fehlgeschlagen (${res.status}).`);
           setPhase("config");
           return;
         }
@@ -156,7 +162,7 @@ export function PracticeArenaClient({
         setRunId(result.runId);
         setPhase("running");
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Retry failed");
+        setErrorMsg(err instanceof Error ? err.message : "Fehler bei der Wiederholung");
         setPhase("config");
       }
     },
@@ -175,12 +181,12 @@ export function PracticeArenaClient({
     <div className="flex flex-col gap-6 sm:gap-7">
       <header>
         <h1 className="text-balance text-[clamp(1.5rem,2vw+0.5rem,1.8rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
-          Practice Arena
+          Übungsarena
         </h1>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
           {preselectedTopicId && !autoStartAttempted
-            ? "Starting a quick practice session for your topic..."
-            : "Configure a custom practice session across subjects, modes, and question types."}
+            ? "Starte eine schnelle Übungseinheit für dein Thema..."
+            : "Konfiguriere eine eigene Übungseinheit über Fächer, Modi und Aufgabentypen hinweg."}
         </p>
       </header>
 
@@ -194,12 +200,14 @@ export function PracticeArenaClient({
       )}
 
       {phase === "starting" && (
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-background p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)]">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          <span className="text-[13px] text-muted-foreground">
-            Generating practice questions...
-          </span>
-        </div>
+        <CockpitCard>
+          <div className="flex items-center gap-3">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+            <span className="text-[13px] text-muted-foreground">
+              Generiere Übungsaufgaben...
+            </span>
+          </div>
+        </CockpitCard>
       )}
 
       {phase === "running" && runId && (
@@ -216,18 +224,20 @@ export function PracticeArenaClient({
       )}
 
       {phase === "error" && (
-        <div className="rounded-xl border border-border bg-background p-7 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)]">
-          <p className="text-[12.5px] text-muted-foreground">
-            {errorMsg ?? "An unexpected error occurred."}
-          </p>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
-          >
-            Back to config
-          </button>
-        </div>
+        <CockpitCard>
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <p className="text-[12.5px] text-muted-foreground">
+              {errorMsg ?? "Ein unerwarteter Fehler ist aufgetreten."}
+            </p>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+            >
+              Zurück zur Konfiguration
+            </button>
+          </div>
+        </CockpitCard>
       )}
     </div>
   );

@@ -118,9 +118,9 @@ export function SummaryView({
 
   if (!run || !items) {
     return (
-      <div className="rounded-xl border border-border bg-background p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)]">
+      <CockpitCard>
         <div className="h-4 w-40 animate-pulse rounded bg-muted/30" />
-      </div>
+      </CockpitCard>
     );
   }
 
@@ -129,24 +129,26 @@ export function SummaryView({
       <CockpitCard>
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-7">
           <div
-            className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-2xl border"
+            className="flex h-28 w-28 shrink-0 items-center justify-center rounded-xl border"
             style={{
               backgroundColor: `color-mix(in srgb, ${gradeTone} 12%, transparent)`,
               borderColor: `color-mix(in srgb, ${gradeTone} 40%, transparent)`,
             }}
           >
-            <span
-              className="text-[56px] font-semibold leading-none tracking-[-0.04em]"
-              style={{ color: gradeTone }}
-            >
-              {grade}
-            </span>
-            <span
-              className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.18em]"
-              style={{ color: gradeTone }}
-            >
-              {gradeLabel}
-            </span>
+            <div className="flex flex-col items-center">
+              <span
+                className="text-[56px] font-semibold leading-none tracking-[-0.04em]"
+                style={{ color: gradeTone }}
+              >
+                {grade}
+              </span>
+              <span
+                className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.18em]"
+                style={{ color: gradeTone }}
+              >
+                {gradeLabel}
+              </span>
+            </div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -163,7 +165,7 @@ export function SummaryView({
               <button
                 type="button"
                 onClick={onReset}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-foreground px-4 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90"
               >
                 <ArrowLeft className="h-3.5 w-3.5" weight="bold" />
                 New session
@@ -171,7 +173,7 @@ export function SummaryView({
               <button
                 type="button"
                 onClick={onReset}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface-elevated px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-surface-elevated px-4 text-[12.5px] font-medium text-foreground transition-colors hover:bg-surface"
               >
                 <Pulse className="h-3.5 w-3.5" weight="duotone" />
                 Run again
@@ -182,7 +184,7 @@ export function SummaryView({
                   onClick={() =>
                     onRetryWrong?.(wrongItems.map((i) => i.itemId))
                   }
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-accent-border/40 bg-accent-subtle/30 px-4 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent-subtle/50"
+                  className="inline-flex h-10 items-center gap-2 rounded-md border border-accent-border/40 bg-accent-subtle/30 px-4 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent-subtle/50"
                 >
                   <ClockCounterClockwise className="h-3.5 w-3.5" weight="duotone" />
                   Retry wrong ({wrongItems.length})
@@ -190,7 +192,7 @@ export function SummaryView({
               )}
               <Link
                 href="/tutor"
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-[12.5px] font-medium text-accent-foreground shadow-[var(--shadow-soft)] transition-colors hover:bg-accent/90"
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
               >
                 <ChatCircleText className="h-3.5 w-3.5" weight="duotone" />
                 Ask tutor about mistakes
@@ -307,15 +309,14 @@ function SummaryItemRow({
         density="bare"
       />
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span
-          className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em]"
-          style={{
-            backgroundColor: `color-mix(in srgb, ${verdictTone} 12%, transparent)`,
-            borderColor: `color-mix(in srgb, ${verdictTone} 36%, transparent)`,
-            color: verdictTone,
-          }}
-        >
+      <div className="mt-3 flex flex-wrap items-center gap-2">          <span
+            className="inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em]"
+            style={{
+              backgroundColor: `color-mix(in srgb, ${verdictTone} 12%, transparent)`,
+              borderColor: `color-mix(in srgb, ${verdictTone} 36%, transparent)`,
+              color: verdictTone,
+            }}
+          >
           {verdict ? (
             <CheckCircle className="mr-1 h-3 w-3" weight="bold" />
           ) : (
