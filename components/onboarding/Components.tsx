@@ -103,7 +103,7 @@ export function OptionCard<TValue extends string | number>({
         // exactly with the icon's left edge and the label's text
         // start - no horizontal jump on selection.
         "group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border bg-surface-elevated text-left transition-all duration-200",
-        "hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] active:translate-y-0 active:scale-[0.985]",
+        "hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] active:translate-y-0",
         selected
           ? "border-2"
           : "border border-border hover:border-accent-border/60",
@@ -403,7 +403,7 @@ export function ContinueBar({
           "group inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[13.5px] font-medium transition-all duration-200",
           disabled
             ? "cursor-not-allowed bg-muted/40 text-muted-foreground/60"
-            : "bg-accent text-accent-foreground shadow-[var(--shadow-soft)] hover:opacity-95 active:scale-[0.98]"
+            : "bg-accent text-accent-foreground shadow-[var(--shadow-soft)] transition-colors hover:bg-accent/90"
         )}
       >
         {label}

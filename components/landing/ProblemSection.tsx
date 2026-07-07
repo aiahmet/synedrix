@@ -13,10 +13,29 @@ import { problemPillars } from "@/components/landing/data";
  * column-5, column-7, column-12. The combination reads as deliberately
  * weighted, never as a row of identical cards.
  *
- * The narrow first column carries a 5-&ndash;-line text-heavy pillar so we
+ * The narrow first column carries a 5-7-line text-heavy pillar so we
  * do not repeat the same shape three times. The middle column carries
  * the operating-thesis pillar. The final full-width row carries the
- * &ldquo;insight, not vanity&rdquo; pillar with a side band.
+ * "insight, not vanity" pillar with a side band.
+ *
+ * Rulebook-driven decisions:
+ *   - No numbered pill chips (01 / 02 / 03). The design-taste-frontend
+ *     rulebook bans section-numbering eyebrows (`00 / INDEX`,
+ *     `06 / how it works`), and the SYNEDRIX-FRONTEND-STYLE rulebook
+ *     bans pill/track chips on marketing surfaces. The titles name
+ *     the pillars; enumeration is redundant and reads as templated.
+ *   - No halo blob on hover. Halos (`bg-[var(--halo-N)] blur-3xl`
+ *     floating gradients) are banned by both rulebooks. The cards'
+ *     single-layer chrome (border + bg-surface-elevated) is the
+ *     entire visual treatment; the hover state is a subtle
+ *     border-color shift only.
+ *   - Asymmetric 5/7/12 grid preserved. The asymmetric spans are the
+ *     reason this section reads as editorial, not as a row of three
+ *     identical feature cards. The narrow first pillar forces the
+ *     eye to read across the row, not down a column.
+ *   - No eyebrow above the H2. The centered title already names the
+ *     section's topic, and the page-wide eyebrow budget is rationed
+ *     (Surfaces carries the only eyebrow in this run of sections).
  */
 export function ProblemSection() {
   const reduce = useReducedMotion();
@@ -69,7 +88,7 @@ export function ProblemSection() {
               ease: [0.16, 1, 0.3, 1],
             }}
             className={
-              "group relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 transition-all duration-500 hover:border-border/70 sm:p-7 " +
+              "group rounded-2xl border border-border bg-surface-elevated p-6 transition-colors duration-200 hover:border-border/70 sm:p-7 " +
               (i === 0
                 ? "sm:col-span-5"
                 : i === 1
@@ -77,21 +96,12 @@ export function ProblemSection() {
                   : "sm:col-span-12")
             }
           >
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[var(--halo-2)] opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-100"
-            />
-            <div className="relative">
-              <span className="inline-flex h-7 items-center rounded-full border border-border/60 bg-surface px-2.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <h3 className="mt-3 text-pretty text-[18px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
-                {pillar.title}
-              </h3>
-              <p className="mt-2 max-w-prose text-[14px] leading-relaxed text-muted-foreground">
-                {pillar.description}
-              </p>
-            </div>
+            <h3 className="text-pretty text-[18px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
+              {pillar.title}
+            </h3>
+            <p className="mt-2 max-w-prose text-[14px] leading-relaxed text-muted-foreground">
+              {pillar.description}
+            </p>
           </motion.li>
         ))}
       </ul>

@@ -9,15 +9,36 @@ import {
   SquaresFour,
   BookOpen,
   ChatCircleText,
+  ClockCounterClockwise,
+  UserCircle,
+  Target,
 } from "@phosphor-icons/react/dist/ssr";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ActiveSessionIndicator } from "@/components/layout/ActiveSessionIndicator";
+import { NavTutorBadge } from "@/components/layout/NavTutorBadge";
 import { cn } from "@/lib/utils/cn";
 import { api } from "@/convex/_generated/api";
 
-const navItems = [
+/**
+ * The primary app nav. Plan §1.4: `/my-topics` (user-
+ * authored topics) is now reachable from the main
+ * chrome. The `UserCircle` icon is the same one used
+ * on `components/dashboard/TopicList.tsx` for the
+ * "MY TOPIC" badge, so the surface language is
+ * consistent.
+ */
+const navItems: ReadonlyArray<{
+  readonly href: string;
+  readonly label: string;
+  readonly Icon: typeof SquaresFour;
+  readonly withBadge?: "tutor";
+}> = [
   { href: "/dashboard", label: "Dashboard", Icon: SquaresFour },
   { href: "/subjects", label: "Subjects", Icon: BookOpen },
-  { href: "/tutor", label: "Tutor", Icon: ChatCircleText },
+  { href: "/review", label: "Review", Icon: ClockCounterClockwise },
+  { href: "/tutor", label: "Tutor", Icon: ChatCircleText, withBadge: "tutor" },
+  { href: "/my-topics", label: "Your topics", Icon: UserCircle },
+  { href: "/practice", label: "Practice", Icon: Target },
 ];
 
 export default async function AppLayout({
@@ -116,13 +137,16 @@ export default async function AppLayout({
             </div>
 
             <nav className="flex-1 space-y-0.5 p-2">
-              {navItems.map(({ href, label, Icon }) => (
+              {navItems.map(({ href, label, Icon, withBadge }) => (
                 <Link
                   key={href}
                   href={href}
                   className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-surface-elevated hover:text-foreground"
                 >
-                  <Icon className="h-5 w-5" weight="duotone" />
+                  <span className="relative">
+                    <Icon className="h-5 w-5" weight="duotone" />
+                    {withBadge === "tutor" && <NavTutorBadge variant="desktop" />}
+                  </span>
                   <span>{label}</span>
                 </Link>
               ))}
@@ -152,6 +176,11 @@ export default async function AppLayout({
                 Your personal learning operating system
               </span>
               <div className="flex items-center gap-3">
+                {/* Plan §3.1: a global "Resume" indicator
+                    that mounts in the top bar. Hidden
+                    when the user has no in-progress
+                    session or practice run. */}
+                <ActiveSessionIndicator variant="desktop" />
                 <ThemeToggle />
                 <div className="md:hidden">
                   <UserButton
@@ -179,7 +208,7 @@ export default async function AppLayout({
             aria-label="Primary"
             className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-surface-elevated/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1.5 backdrop-blur-xl md:hidden"
           >
-            {navItems.map(({ href, label, Icon }) => (
+            {navItems.map(({ href, label, Icon, withBadge }) => (
               <Link
                 key={href}
                 href={href}
@@ -187,10 +216,23 @@ export default async function AppLayout({
                   "group flex min-w-[64px] flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-elevated"
                 )}
               >
-                <Icon className="h-5 w-5" weight="duotone" />
+                <span className="relative">
+                  <Icon className="h-5 w-5" weight="duotone" />
+                  {withBadge === "tutor" && <NavTutorBadge variant="mobile" />}
+                </span>
                 <span>{label}</span>
               </Link>
             ))}
+            {/* Plan §3.1: a Resume slot in the mobile
+                bottom bar. Rendered after the four
+                primary nav items so it does not crowd
+                them — a 5th cell on a 320px viewport is
+                still legible because the existing
+                `min-w-[64px]` slot leaves room. The
+                `ml-auto` would push it right but the
+                fixed-position bar uses `justify-around`,
+                so we render it inline. */}
+            <ActiveSessionIndicator variant="mobile" />
             <div className="flex min-w-[64px] flex-col items-center gap-0.5 py-1.5">
               <UserButton
                 appearance={{

@@ -2,45 +2,87 @@
 
 import { motion, useReducedMotion } from "motion/react";
 
-import { cn } from "@/lib/utils/cn";
 import { Section, SectionHeading } from "@/components/landing/ui/Section";
-import { Eyebrow } from "@/components/landing/ui/Eyebrow";
 import { surfaces } from "@/components/landing/data";
-import { DashboardMock } from "@/components/landing/mock/DashboardMock";
 import { TopicMock } from "@/components/landing/mock/TopicMock";
-import { TutorMock } from "@/components/landing/mock/TutorMock";
-import { PracticeMock } from "@/components/landing/mock/PracticeMock";
-import { ReviewMock } from "@/components/landing/mock/ReviewMock";
+import type { ReactNode } from "react";
 
 /**
- * Backing inline mini-mock for surfaces that do not yet have a richer
- * dedicated preview (Focus Mode, Mistake Journal, Planner). Each
- * is a calm stand-in that mirrors the visual rhythm of the larger
- * mocks, not a placeholder wall of text.
+ * One-line evidence row for a non-hero cell. Renders as quiet
+ * muted text inside the cell; the cell is the surface, the
+ * snippet is just a row of evidence. No card chrome.
+ *
+ * Used in place of the previous nested `MiniMock` cards, which
+ * double-stacked border + bg-surface-sunken inside the cell's
+ * own border + bg-surface. The rulebook's "single-layer card"
+ * rule and "no carded list rows" rule both apply: a single
+ * muted text line carries the same signal without the chrome.
  */
-function MiniMock({
-  name,
-  rows,
-  caption,
+function DataSnippet({
+  primary,
+  secondary,
 }: {
-  name: string;
-  rows: string[];
-  caption: string;
+  readonly primary: string;
+  readonly secondary: string;
 }) {
   return (
-    <div className="mt-6 overflow-hidden rounded-xl border border-border/60 bg-surface-sunken/60">
-      <div className="flex items-center justify-between border-b border-border/60 bg-surface-elevated px-3 py-1.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
-          {name}
-        </span>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {caption}
-        </span>
-      </div>
-      <ul className="divide-y divide-border/40 px-3">
+    <p className="mt-5 border-t border-border-faint pt-3 text-[12px] leading-snug">
+      <span className="text-foreground">{primary}</span>
+      <span className="ml-2 text-muted-foreground">{secondary}</span>
+    </p>
+  );
+}
+
+/**
+ * Tone-to-class lookup. Hoisted to module scope so it is not
+ * re-allocated on every render; matches the convention the
+ * deleted mocks used (`WINDOW_TONE`, `KIND_BADGE`).
+ */
+const TONE_CLASS: Record<"default" | "accent" | "warn", string> = {
+  default: "text-foreground",
+  accent: "text-accent",
+  warn: "text-subject-french",
+};
+
+/**
+ * Compact multi-row preview for a non-hero cell. Renders 2-3
+ * short rows of (label, value) pairs separated by a single
+ * hairline above the group, not between every row (rulebook
+ * §9.F: pick one border direction and use it sparsely).
+ *
+ * Used on cells where a one-line DataSnippet would lose too
+ * much signal (Tutor context, unified review queue). The hero
+ * is the only cell with a real product mock; the other small
+ * cells with structured multi-row data use this. The remaining
+ * five cells stay on `DataSnippet` because a single line of
+ * evidence is enough.
+ */
+function CompactPreview({
+  rows,
+}: {
+  readonly rows: ReadonlyArray<{
+    readonly label: string;
+    readonly value: string;
+    readonly tone?: "default" | "accent" | "warn";
+  }>;
+}) {
+  return (
+    <div className="mt-5 border-t border-border-faint pt-3">
+      <ul className="flex flex-col gap-1.5">
         {rows.map((row) => (
-          <li key={row} className="py-1.5 font-mono text-[11px] text-muted-foreground">
-            {row}
+          <li
+            key={`${row.label}:${row.value}`}
+            className="flex items-center justify-between gap-3 text-[11.5px] leading-snug"
+          >
+            <span className="truncate font-mono text-[10.5px] uppercase tracking-[0.1em] text-muted-foreground">
+              {row.label}
+            </span>
+            <span
+              className={`truncate font-medium ${TONE_CLASS[row.tone ?? "default"]}`}
+              title={row.value}
+            >
+              {row.value}
+            </span>
           </li>
         ))}
       </ul>
@@ -49,187 +91,163 @@ function MiniMock({
 }
 
 /**
- * Exactly one preview per surface. The hero bento gets the full
- * DashboardMock. Other named mocks are reused so visual continuity
- * carries through the page.
+ * Per-surface tile.
+ *
+ * Single-layer contract (style guide §1, §5):
+ *   - One 1px border on the cell. Nothing nested inside.
+ *   - The icon sits at 20px in muted-foreground, no chip.
+ *   - All cells use the same H3 size and weight. The hero
+ *     is differentiated by its full-row width and by the
+ *     real product preview it carries, not by a different
+ *     font scale.
+ *   - The hero (Cockpit) renders `TopicMock` in `bare` mode
+ *     so the cell provides the only card chrome. The other
+ *     eight cells are typography with at most a one-line
+ *     `DataSnippet` for evidence.
  */
-const PREVIEW: Record<string, React.ReactNode> = {
-  Cockpit: <DashboardMock />,
-  "Subject Hubs": (
-    <MiniMock
-      name="Hub \u00b7 Math"
-      caption="3rd chapter"
-      rows={[
-        "Algebra II \u00b7 60% mastery",
-        "Trigonometry \u00b7 41% mastery",
-        "Stats \u00b7 18% mastery",
-      ]}
-    />
-  ),
-  "Topic Pages": <TopicMock />,
-  "Tutor Workspace": <TutorMock />,
-  "Practice Arena": <PracticeMock />,
-  "Review Center": <ReviewMock />,
-  "Focus Mode": (
-    <MiniMock
-      name="Focus session"
-      caption="00:18:40"
-      rows={[
-        "Goal: Master logarithms",
-        "Hide nav, mute notifications",
-        "Reflection at session close",
-      ]}
-    />
-  ),
-  "Mistake Journal": (
-    <MiniMock
-      name="Journal"
-      caption="missed today"
-      rows={[
-        "\u00b7 Sign error on ln(a\u00b7b)",
-        "\u00b7 domain check skipped",
-        "\u00b7 mixed change-of-base bases",
-      ]}
-    />
-  ),
-  Planner: (
-    <MiniMock
-      name="Today"
-      caption="2 / 4 goals"
-      rows={[
-        "Recover log foundations",
-        "Practice 6 problems",
-        "Review 9 due cards",
-        "Reflect",
-      ]}
-    />
-  ),
-};
-
-interface SurfaceTileProps {
+function SurfaceTile({
+  surface,
+  isHero,
+  preview,
+}: {
   readonly surface: (typeof surfaces)[number];
-  readonly index: number;
-  readonly reduceMotion: boolean;
-}
-
-/**
- * Per-surface tile used inside the bento grid.
- *
- * Visual variation per cell:
- *   - Hero (Cockpit):  full mock fills the card, gradient halo, larger icon
- *   - Cells with their own mock:  mock renders inside the card
- *   - Quiet cells without a mock:  mini-mock row to keep rhythm
- *
- * Every card uses the double-bezel technique: outer wrapper carries
- * the hairline + padding, inner area is the surface-elevated core.
- * No card is dead space; each surfaces something real from the app.
- */
-function SurfaceTile({ surface, index, reduceMotion }: SurfaceTileProps) {
-  const isHero = surface.isHero ?? false;
-  const hasMock = PREVIEW[surface.title] !== undefined;
-
+  readonly isHero: boolean;
+  readonly preview: ReactNode;
+}) {
   return (
-    <motion.article
-      initial={reduceMotion ? false : { opacity: 0, y: 22 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{
-        duration: 0.65,
-        delay: index * 0.05,
-        ease: [0.16, 1, 0.3, 1],
-      }}
-      className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface p-1.5 transition-all duration-500 hover:border-border/70 hover:shadow-[var(--shadow-soft)]",
+    <article
+      className={
+        "flex flex-col rounded-2xl border border-border bg-surface p-6 sm:p-7 " +
         surface.span
-      )}
+      }
     >
-      <div className="relative flex h-full flex-col rounded-[14px] border border-border/60 bg-surface-elevated p-5 inner-highlight sm:p-6">
-        {isHero ? (
-          <>
-            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--halo-1)] opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-100" />
-            <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-accent/60 via-accent/20 to-transparent" />
-          </>
-        ) : (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[var(--halo-2)] opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-100"
-          />
-        )}
+      <surface.icon
+        className="h-5 w-5 text-muted-foreground"
+        weight="duotone"
+        aria-hidden
+      />
 
-        {!isHero && (
-          <div className="flex items-center justify-between">
-            <div
-              className={cn(
-                "flex shrink-0 items-center justify-center rounded-xl bg-accent/10 ring-1 ring-accent/10",
-                "h-10 w-10"
-              )}
-            >
-              <surface.icon
-                className="h-5 w-5 text-accent"
-                weight="duotone"
-              />
-            </div>
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-              {surface.highlight}
-            </span>
-          </div>
-        )}
+      <h3 className="mt-4 text-[16px] font-semibold leading-snug tracking-[-0.005em] text-foreground">
+        {surface.title}
+      </h3>
+      <p className="mt-1.5 text-[13px] leading-[1.55] text-muted-foreground">
+        {surface.description}
+      </p>
 
-        {isHero && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-accent">
-                {surface.highlight}
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {surface.summary}
-              </span>
-            </div>
-            <span className="inline-flex h-6 items-center rounded-full border border-border bg-surface px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              core
-            </span>
-          </div>
-        )}
-
-        <h3
-          className={cn(
-            "mt-3 font-semibold tracking-tight text-foreground",
-            isHero ? "text-[20px] leading-tight" : "text-[16px] leading-snug"
-          )}
-        >
-          {surface.title}
-        </h3>
-        <p
-          className={cn(
-            "mt-1.5 leading-relaxed text-muted-foreground",
-            isHero ? "text-[14px]" : "text-[12.5px]"
-          )}
-        >
-          {surface.description}
-        </p>
-
-        {/* Preview block. Reused mocks for known surfaces; mini-mocks for the
-            remaining ones keep visual rhythm without oversizing the card. */}
-        {isHero ? (
-          hasMock && (
-            <div className="mt-5 -mx-1 -mb-1">{PREVIEW[surface.title]}</div>
-          )
-        ) : (
-          hasMock && (
-            <div className="mt-4">
-              <div className="overflow-hidden rounded-xl">{PREVIEW[surface.title]}</div>
-            </div>
-          )
-        )}
-      </div>
-    </motion.article>
+      {isHero ? <div className="mt-6">{preview}</div> : preview}
+    </article>
   );
 }
 
 /**
- * Nine-cell bento covering the nine surfaces documented in section 7 of
- * the product specification. No empty cells, no placeholder. Tail spans
- * resolve to grid-auto-rows so heights stay calm.
+ * One preview per surface.
+ *
+ * Only the hero (Cockpit) carries a real product preview
+ * (`TopicMock`, the most product-defining surface in the
+ * system). The other eight surfaces get at most a one-line
+ * `DataSnippet` so the bento stays one editorial block, not
+ * nine competing visuals.
+ */
+const PREVIEW: Record<string, ReactNode> = {
+  Cockpit: <TopicMock bare />,
+  "Subject Hubs": (
+    <DataSnippet
+      primary="Math · Physics · Chemistry · French · German · English"
+      secondary="six subject-tuned workflows"
+    />
+  ),
+  "Topic Pages": (
+    <DataSnippet
+      primary="Simple · Standard · Rigorous"
+      secondary="three depths on one page"
+    />
+  ),
+  "Tutor Workspace": (
+    <CompactPreview
+      rows={[
+        { label: "Context", value: "Math / Logs", tone: "default" },
+        { label: "Recent", value: "3 mistakes on this topic", tone: "accent" },
+        { label: "Mode", value: "Hint only", tone: "default" },
+      ]}
+    />
+  ),
+  "Practice Arena": (
+    <DataSnippet
+      primary="MCQ · step · fill-in · formula · oral"
+      secondary="every answer gets full feedback"
+    />
+  ),
+  "Review Center": (
+    <CompactPreview
+      rows={[
+        { label: "Today", value: "log\u2082(x) domain rules", tone: "accent" },
+        { label: "Today", value: "sign on dU/dt", tone: "accent" },
+        { label: "Overdue", value: "subjonctif recovery", tone: "warn" },
+      ]}
+    />
+  ),
+  "Focus Mode": (
+    <DataSnippet
+      primary="Goal + timer + reflection"
+      secondary="navigation hidden, notifications muted"
+    />
+  ),
+  "Mistake Journal": (
+    <DataSnippet
+      primary="Tagged by concept and cause"
+      secondary="every mistake enters the review queue"
+    />
+  ),
+  Planner: (
+    <DataSnippet
+      primary="Daily and weekly goals"
+      secondary="auto-recovery after missed days"
+    />
+  ),
+};
+
+/**
+ * Nine-cell bento covering the nine surfaces documented in
+ * section 7 of the product specification.
+ *
+ * Structural rewrite following the polish-vs-structure
+ * protocol in docs/SYNEDRIX-FRONTEND-STYLE.md and
+ * AGENTS.md §"Frontend & UI/UX Improvements":
+ *
+ *   1. **Eyebrow pill chip is removed.** The previous
+ *      `<Eyebrow tone="accent">Features</Eyebrow>` is a
+ *      banned pattern (style guide §1: "Pill/track uppercase
+ *      eyebrow chips. Use plain uppercase muted text.").
+ *      The H2 below now carries the section identity alone,
+ *      which is also the design-taste-frontend default
+ *      ("What to do instead of an eyebrow: drop it entirely.
+ *      The headline alone is enough.").
+ *   2. **H2 is sharpened to a concrete noun pair.** "Nine
+ *      surfaces, one loop" replaces "Nine surfaces, one
+ *      workflow" so the second noun names the actual system
+ *      mechanism (the loop described in the next section),
+ *      not the abstract "workflow."
+ *   3. **The visual hierarchy now matches the product
+ *      hierarchy.** The Cockpit is the morning anchor in the
+ *      actual product, so it is the visual anchor here: full
+ *      row width + the only real product preview. The
+ *      previous version inverted this (4 detailed mocks on
+ *      small 2-col cells, only a MiniMock on the hero).
+ *   4. **Triple-nested chrome is gone.** The 4 detailed
+ *      mocks previously rendered as their own
+ *      `rounded-3xl border bg-surface-elevated shadow-pop`
+ *      cards inside a bento cell that was already a
+ *      `border bg-surface` card. The cell IS the surface
+ *      now; the `TopicMock` runs in `bare` mode.
+ *   5. **The 8 small cells are typography with at most one
+ *      muted data line.** The previous MiniMock added a
+ *      `bg-surface-sunken/50` chrome inside the cell. The
+ *      new `DataSnippet` is a single hairline-divided text
+ *      line, no second card layer.
+ *   6. **All 9 cells use the same H3 size and weight.** The
+ *      previous `isHero`-driven 20px vs 16px font variation
+ *      was a Tell. The hero is differentiated by its size
+ *      and its mock, not by a font bump.
  */
 export function SurfacesBento() {
   const reduce = useReducedMotion() ?? false;
@@ -248,17 +266,16 @@ export function SurfacesBento() {
       >
         <SectionHeading
           titleId="surfaces-title"
-          eyebrow={<Eyebrow tone="accent">Features</Eyebrow>}
           title={
             <>
               Nine surfaces,
               <br />
-              one workflow.
+              one loop.
             </>
           }
           description={
             <>
-              Synedrix is &nbsp;not a notes app with a chatbot bolted on. Every
+              Synedrix is not a notes app with a chatbot bolted on. Every
               surface reads from the same state, so the tutor already knows
               what the practice engine just tested and the planner already
               knows what the review queue is about to demand.
@@ -267,13 +284,13 @@ export function SurfacesBento() {
         />
       </motion.div>
 
-      <div className="mt-14 grid auto-rows-fr grid-cols-1 gap-4 md:grid-cols-4 md:gap-5">
-        {surfaces.map((surface, index) => (
+      <div className="mt-14 grid grid-cols-1 gap-4 md:grid-cols-4 md:gap-5">
+        {surfaces.map((surface) => (
           <SurfaceTile
             key={surface.title}
             surface={surface}
-            index={index}
-            reduceMotion={reduce}
+            isHero={surface.isHero ?? false}
+            preview={PREVIEW[surface.title]!}
           />
         ))}
       </div>

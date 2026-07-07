@@ -4,20 +4,23 @@ import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { cn } from "@/lib/utils/cn";
-import { Section, SectionHeading } from "@/components/landing/ui/Section";
+import { Section } from "@/components/landing/ui/Section";
+import { ArrowRight } from "@/components/landing/icons";
 import { faqItems } from "@/components/landing/data";
 
 /**
  * FAQ section.
  *
- * Native HTML <details>/<summary> accordion: zero JS-only state, full
- * keyboard support, screen-reader friendly, and progressive enhancement
- * if JS fails to load. We intentionally avoid the JS-controlled accordion
- * + animated height trick because it is the LLM default for FAQ UIs and
- * usually breaks the back button or deep-link scroll.
+ * A JS-controlled accordion with Motion-powered height
+ * animation. Each answer is short on purpose; deeper
+ * questions should be answered in the README,
+ * CONTRIBUTING, or the spec doc.
  *
- * Each answer is short on purpose; deeper questions should be answered
- * in the README, CONTRIBUTING, or the spec doc.
+ * The heading is a concrete editorial H2 with no
+ * description paragraph — the questions themselves
+ * carry the section's meaning. The closing bar is a
+ * single GitHub link + licence line matching the brand
+ * panel pattern from the style rulebook.
  */
 export function FaqSection() {
   const reduce = useReducedMotion() ?? false;
@@ -35,23 +38,14 @@ export function FaqSection() {
         viewport={{ once: true, amount: 0.4 }}
         transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
       >
-        <SectionHeading
-          titleId="faq-title"
-          title={
-            <>
-              Honest answers
-              <br />
-              to common questions.
-            </>
-          }
-          description={
-            <>
-              What this app does today, what it does not, and the design
-              decisions behind it. The full architectural and product spec
-              lives in the spec doc and the README.
-            </>
-          }
-        />
+        <h2
+          id="faq-title"
+          className="text-[clamp(1.95rem,2.4vw+0.5rem,2.75rem)] font-semibold leading-[1.04] tracking-[-0.024em] text-foreground"
+        >
+          The honest
+          <br />
+          FAQ.
+        </h2>
       </motion.div>
 
       <ul className="mt-14 overflow-hidden rounded-2xl border border-border bg-surface-elevated">
@@ -105,19 +99,19 @@ export function FaqSection() {
         })}
       </ul>
 
-      <div className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-border bg-surface p-4">
-        <p className="text-[13px] text-muted-foreground">
-          Still curious? Open a thread on GitHub Discussions or read the spec
-          document on the project wiki.
-        </p>
+      <div className="mt-6 flex flex-col gap-1.5 border-t border-border pt-6">
         <a
           href="https://github.com/aiahmet/synedrix/discussions"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-surface-elevated px-4 text-[12.5px] font-medium text-foreground outline-none transition-colors hover:border-border/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="group inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-foreground outline-none transition-colors hover:text-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          Open a thread
+          Ask on GitHub Discussions
+          <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" weight="bold" />
         </a>
+        <p className="text-[11.5px] text-muted-foreground/80">
+          MIT licensed. Every answer above is from the spec, not a marketer.
+        </p>
       </div>
     </Section>
   );

@@ -11,13 +11,13 @@ import {
 /**
  * Getting started section.
  *
- * Three steps inside a careful editorial column, each carrying a real
- * terminal preview. The verb label avoids &ldquo;Stage 1 / Stage 2&rdquo;
- * generic-label slop and reads like an NVIDIA / Linear install guide.
+ * Three install steps in a clean editorial column. Each step carries a
+ * real terminal preview. The presentation is typography-first: no halo
+ * blobs, no icon containers, no generic step-numbering labels, no
+ * carded metadata rows.
  *
- * The prerequisites strip sits above the steps so the visitor knows
- * what they need on hand before reading the commands. Each prerequisite
- * card uses the double-bezel pattern for visual consistency.
+ * The prerequisites strip sits above the steps as a plain text row so
+ * the visitor knows what they need before reading the commands.
  */
 export function GettingStarted() {
   const reduce = useReducedMotion() ?? false;
@@ -43,29 +43,25 @@ export function GettingStarted() {
               under two minutes.
             </>
           }
-          description={
-            <>
-              Clone, configure keys, run two dev commands. You can sign in
-              and start your first topic before your coffee arrives.
-            </>
-          }
+          description="Clone, configure keys, run two dev commands. Sign in and start your first topic before your coffee arrives."
         />
       </motion.div>
 
+      {/* Prerequisites: plain typography, no carded rows. */}
       <div className="mt-10">
-        <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
           Prerequisites
         </p>
-        <ul className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
           {prerequisites.map((req) => (
             <li
               key={req.label}
-              className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-surface p-3"
+              className="flex items-baseline gap-1.5"
             >
-              <span className="text-[12.5px] font-medium text-foreground">
+              <span className="text-[13.5px] font-medium text-foreground">
                 {req.label}
               </span>
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+              <span className="text-[12px] text-muted-foreground">
                 {req.note}
               </span>
             </li>
@@ -85,28 +81,27 @@ export function GettingStarted() {
               delay: i * 0.06,
               ease: [0.16, 1, 0.3, 1],
             }}
-            className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated transition-all duration-500 hover:border-border/70 hover:shadow-[var(--shadow-soft)]"
+            className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated transition-colors duration-500 hover:border-border/70"
           >
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[var(--halo-2)] opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-100"
-            />
-            <div className="relative flex h-full flex-col p-6 sm:p-7">
+            <div className="flex h-full flex-col p-6 sm:p-7">
+              {/* Verb eyebrow: plain text per Synedrix §2, no step numbering. */}
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.16em] text-accent">
-                  Step {String(i + 1).padStart(2, "0")} {" \u00b7 "} {step.verb}
+                <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  {step.verb}
                 </span>
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 ring-1 ring-accent/10">
-                  <step.icon className="h-4 w-4 text-accent" weight="duotone" />
-                </span>
+                <step.icon
+                  className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground"
+                  weight="duotone"
+                />
               </div>
               <h3 className="mt-3 text-[18px] font-semibold tracking-tight text-foreground">
                 {step.title}
               </h3>
-              <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">
+              <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
                 {step.description}
               </p>
 
+              {/* Terminal preview: single-layer card, no accent chrome. */}
               <div className="mt-5 flex-1 overflow-hidden rounded-xl border border-border bg-surface">
                 <div className="flex items-center justify-between border-b border-border bg-surface-elevated px-3 py-2">
                   <span className="font-mono text-[10.5px] text-muted-foreground">
@@ -122,7 +117,7 @@ export function GettingStarted() {
                       <span key={idx} className="block">
                         <span
                           aria-hidden
-                          className="select-none pr-3 text-accent/70"
+                          className="select-none pr-3 text-muted-foreground/50"
                         >
                           $
                         </span>
@@ -137,18 +132,19 @@ export function GettingStarted() {
         ))}
       </ol>
 
-      <div className="mt-6 rounded-xl border border-border bg-surface p-4 text-[12px] text-muted-foreground">
-        <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-accent">
-          Note
-        </p>
-        <p className="mt-1.5 text-[13px]">
-          <span className="font-mono text-foreground">{"\u2192 "}</span>
+      {/* Context note: muted, no accent label. */}
+      <div className="mt-6 rounded-xl border border-border bg-surface p-4">
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
           The full env-var reference lives in the README, with sign-up links
           for Convex, Clerk, and OpenRouter if you do not have accounts yet.
-          Both dev commands should be running side-by-side; the first run of
-          <span className="font-mono text-foreground"> npx convex dev </span>
-          will print the deploy URL to paste into your
-          <span className="font-mono text-foreground"> .env.local</span>.
+          Both dev commands should be running side by side; the first run of{" "}
+          <code className="rounded bg-surface-elevated px-1 py-0.5 font-mono text-[11.5px] text-foreground">
+            npx convex dev
+          </code>{" "}
+          will print the deploy URL to paste into your{" "}
+          <code className="rounded bg-surface-elevated px-1 py-0.5 font-mono text-[11.5px] text-foreground">
+            .env.local
+          </code>.
         </p>
       </div>
     </Section>

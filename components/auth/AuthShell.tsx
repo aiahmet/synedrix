@@ -7,18 +7,29 @@ import { ArrowRight } from "@/components/landing/icons";
 /**
  * AuthShell.
  *
- * Two-pane split layout shared by /sign-in and /sign-up. The left
- * pane is a server-rendered brand panel that carries the value prop
- * for the page; the right pane is where the Clerk component mounts.
+ * Two-pane split layout shared by /sign-in and /sign-up.
  *
- * Layout discipline:
- *   - Desktop: 6/6 split, brand panel left, form panel right.
- *   - Tablet:  stacked, brand panel collapses to a thin strip on top.
- *   - Mobile:  same as tablet, brand panel becomes a sentence.
+ * Design discipline (plan §0 — anti-slop auth):
+ *   - No halo blobs, no radial dot grids, no decorative overlay.
+ *     The page is pure typography on a single background.
+ *   - The two panes share `bg-background` as the base, but the
+ *     brand aside carries a subtle `bg-surface-elevated/30` tint
+ *     so the page reads as two rooms, not one wide canvas. A
+ *     `border-r` on desktop and `border-b` on mobile confirms the
+ *     split on systems where the tint is too faint.
+ *   - The header is quiet: a brand mark, theme toggle, and a
+ *     single line alternate-mode link. No badge, no extras.
+ *   - The form sits in an `AuthFormCard` that is a single-layer
+ *     rounded surface — no nested decoration, no inner shadow.
+ *   - The footer is one line, low contrast. It is functional copy,
+ *     not visual decoration.
  *
- * The top bar is a thin floating nav so the page never reads as a
- * walled-off dialog. It exposes the brand mark, the theme toggle,
- * and an alternate-mode link (sign-up to sign-in, or vice versa).
+ * Responsive rules:
+ *   - Desktop (>=lg): 6/6 split, brand Aside on the left, the form
+ *     section on the right, separated by `border-r`.
+ *   - Tablet (<lg): vertically stacked. Brand collapses above,
+ *     form below. A `border-b` separates them on stacked viewports.
+ *   - Mobile: same as tablet, with reduced horizontal padding.
  */
 
 interface AuthShellProps {
@@ -39,66 +50,55 @@ export function AuthShell({
   legalNote,
 }: AuthShellProps) {
   return (
-    <div className="relative isolate flex min-h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
-      {/* Ambient halo so the page never reads as flat. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <span className="absolute -left-40 -top-40 h-[520px] w-[520px] rounded-full bg-[var(--halo-1)] blur-[120px]" />
-        <span className="absolute -bottom-40 -right-32 h-[440px] w-[440px] rounded-full bg-[var(--halo-2)] blur-[110px]" />
-        <div
-          className="absolute inset-0 opacity-[0.015]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, currentColor 0.6px, transparent 0.6px)",
-            backgroundSize: "32px 32px",
-          }}
-        />
-      </div>
-
-      <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-8">
+    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <header className="relative z-10 flex items-center justify-between px-5 py-4 sm:px-8 sm:py-4">
         <Link
           href="/"
           aria-label="Synedrix home"
-          className="flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="group flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-[10px] font-bold text-accent-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-[10px] font-bold tracking-tight text-background">
             SX
           </span>
-          <span className="text-sm font-semibold tracking-tight">Synedrix</span>
+          <span className="text-[13.5px] font-medium tracking-[-0.005em]">
+            Synedrix
+          </span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <ThemeToggle />
           <Link
             href={alternate.href}
-            className="inline-flex h-8 items-center rounded-full border border-border bg-surface-elevated/60 px-3 text-[12.5px] font-medium text-muted-foreground backdrop-blur-sm transition-colors hover:border-border hover:text-foreground"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            {alternate.cta}
-            <ArrowRight className="ml-1.5 h-3 w-3" weight="bold" />
+            <span className="hidden sm:inline">{alternate.label}</span>
+            <span className="sm:hidden">{alternate.cta}</span>
+            <ArrowRight className="h-3 w-3" weight="bold" />
           </Link>
         </div>
       </header>
 
       <main
         id="main"
-        className="relative z-10 grid flex-1 grid-cols-1 lg:grid-cols-12"
+        className="relative z-10 grid flex-1 grid-cols-1 lg:grid-cols-2"
       >
         <aside
           aria-label="Product context"
-          className="grid grid-cols-1 items-start gap-8 px-6 pb-10 pt-4 sm:px-10 lg:col-span-6 lg:items-center lg:gap-10 lg:px-12 lg:py-12 xl:px-16"
+          className="border-b border-border bg-surface-elevated/30 px-6 pb-10 pt-8 sm:px-10 lg:border-b-0 lg:border-r lg:px-12 lg:py-14 xl:px-16"
         >
           {brandPanel}
         </aside>
 
         <section
           aria-label={alternate.label}
-          className="flex items-start justify-center px-6 pb-12 sm:px-10 lg:col-span-6 lg:items-center lg:px-12 lg:py-12"
+          className="flex items-start justify-center bg-background px-6 py-10 sm:px-10 lg:items-center lg:px-14 lg:py-14 xl:px-20"
         >
           <div className="w-full max-w-md">{form}</div>
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-border/60 px-6 py-5 sm:px-10">
-        <p className="mx-auto max-w-6xl text-center font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+      <footer className="relative z-10 px-6 py-5 sm:px-10">
+        <p className="mx-auto max-w-6xl text-center text-[11px] leading-relaxed text-muted-foreground/70">
           {legalNote}
         </p>
       </footer>
@@ -108,7 +108,19 @@ export function AuthShell({
 
 /**
  * Container for the form card. Used by both pages so the form sits
- * inside a consistent surface that hides Clerk's default chrome.
+ * inside a single, consistent surface.
+ *
+ * Anti-slop:
+ *   - Single-layer rounded card. No nested `bg-surface-elevated`
+ *     wrapper. No `accent/5` overlay ring. No triple-nested chrome.
+ *   - Border is the same `--border` token the rest of the app uses,
+ *     so the card is part of the design system rather than a
+ *     standalone surface.
+ *   - Title + description are stacked, left-aligned (editorial),
+ *     not centered (generic SaaS).
+ *   - Shadow is layered: a tight `0 1px 3px` for edge definition,
+ *     a soft `0 8px 24px` for floor shadow. Dark mode flips the
+ *     shadow to a faint inner highlight.
  */
 export function AuthFormCard({
   children,
@@ -120,29 +132,26 @@ export function AuthFormCard({
   readonly description: string;
 }) {
   return (
-    <div className="relative">
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 rounded-2xl bg-accent/5 ring-1 ring-accent/10"
-      />
-      <div className="relative rounded-2xl border border-border bg-surface-elevated p-1.5">
-        <div className="rounded-xl bg-background p-7 sm:p-8">
-          <header className="mb-7 text-center">
-            <h1 className="text-pretty text-[24px] font-semibold leading-tight tracking-[-0.015em] text-foreground sm:text-[26px]">
-              {title}
-            </h1>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
-              {description}
-            </p>
-          </header>
-          {children}
-        </div>
-      </div>
+    <div className="relative rounded-xl border border-border bg-background p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.08)] sm:p-8 dark:shadow-[0_1px_0_0_rgb(255_255_255_/_0.05),0_8px_24px_-12px_rgba(0,0,0,0.45)]">
+      <header className="mb-7 flex flex-col gap-1.5">
+        <h1 className="text-[22px] font-semibold leading-[1.05] tracking-[-0.022em] text-foreground">
+          {title}
+        </h1>
+        <p className="max-w-sm text-[13px] leading-[1.55] text-muted-foreground">
+          {description}
+        </p>
+      </header>
+      {children}
     </div>
   );
 }
 
-/** Small helper to keep typography uniform across panels. */
+/**
+ * Editorial eyebrow used above the H2 of the brand panel.
+ *
+ * No pill, no coloured dot, no border. Just stark uppercase
+ * typography that the eye reads as a label, not a chip.
+ */
 export function AuthEyebrow({
   children,
   className,
@@ -153,11 +162,10 @@ export function AuthEyebrow({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-accent-border/50 bg-accent-subtle/60 px-3 py-1 text-[10.5px] font-medium uppercase tracking-[0.18em] text-accent",
+        "text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground",
         className
       )}
     >
-      <span className="h-1 w-1 rounded-full bg-accent" />
       {children}
     </span>
   );

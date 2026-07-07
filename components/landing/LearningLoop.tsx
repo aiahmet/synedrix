@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, type KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Section, SectionHeading } from "@/components/landing/ui/Section";
-import { Eyebrow } from "@/components/landing/ui/Eyebrow";
 import { loopSteps } from "@/components/landing/data";
 import type { PhosphorIcon } from "@/components/landing/icons";
 import { cn } from "@/lib/utils/cn";
@@ -12,16 +11,47 @@ import { cn } from "@/lib/utils/cn";
 /**
  * Interactive learning loop.
  *
- * Desktop: seven steps form a horizontal timeline; hovering or focusing
- * a step expands its detail panel beneath. The first step is expanded on
- * first render so the section never reads as empty.
+ * Structural rewrite (style guide sections 1, 2, 5 + design-taste-frontend
+ * section 9). The previous version shipped six banned patterns on a
+ * single surface; this rewrite attacks each at the structural level
+ * instead of polishing around them.
  *
- * Accessibility:
- *   - The list is a real ordered list with role="list" semantics.
- *   - Each step is a real button with aria-pressed reflecting active state.
- *   - Arrow, Home, and End keys move selection for keyboard users.
- *   - The detail panel is wired with aria-controls and aria-live="polite".
- *   - On touch, the click keeps the panel expanded; hover is desktop only.
+ *   1. **Pill eyebrow is dropped.** The H2 ("The core learning loop.")
+ *      already names the section. The previous `<Eyebrow>` rendered a
+ *      rounded-full bordered chip (banned §1: "Pill/track uppercase
+ *      eyebrow chips. Use plain uppercase muted text."). Plain
+ *      editorial typography does the work.
+ *   2. **Timeline steps are no longer carded buttons.** The seven steps
+ *      are now a divided row of plain text inside a single rounded
+ *      surface. Each cell is still a real `<button>` for accessibility
+ *      (aria-pressed, keyboard nav), but the cell carries no border,
+ *      shadow, or hover translate of its own. The active step is
+ *      shown through cell background, number color, and title weight
+ *      alone (banned §1: "Lists are typography. Don't card them.").
+ *   3. **Icon containers are removed.** The detail panel previously
+ *      wrapped its icon in `bg-accent/10 ring-1 ring-accent/10` (banned
+ *      §1, §8: "Just render the icon at native size and color."). The
+ *      icon now sits at 16px in the muted-foreground, native-sized.
+ *   4. **Connector line is removed.** The animated width-based progress
+ *      bar was decorative chrome that did not communicate hierarchy.
+ *   5. **Detail panel is single-layer.** The previous version
+ *      triple-nested an outer card, a right-column faux product
+ *      preview, and an inner icon container (banned §1, §5: "Every
+ *      container is single-layer. No `border` wrapping a `bg-elevated`
+ *      wrapping an inner padded inner box. Pick one surface."). The
+ *      right-column faux preview is gone. The radial dot grid it sat
+ *      on is also gone (banned §1, §9: "Radial dot grids"). The detail
+ *      panel is now one border + bg-surface-elevated surface with
+ *      the metadata strip, h3, and body text only.
+ *   6. **Bouncy hover/active is gone.** The previous version used
+ *      `-translate-y-1` on the active step and `hover:-translate-y-0.5`
+ *      on the rest. The new version uses color + weight transitions
+ *      only.
+ *
+ * Accessibility: the row of steps remains a real ordered list with
+ * role="list" semantics; each step is a real button with aria-pressed
+ * reflecting active state; arrow, Home, and End keys move selection;
+ * the detail panel is wired with aria-controls and aria-live="polite".
  */
 export function LearningLoop() {
   const reduce = useReducedMotion() ?? false;
@@ -65,7 +95,6 @@ export function LearningLoop() {
       >
         <SectionHeading
           titleId="loop-title"
-          eyebrow={<Eyebrow tone="accent">The loop</Eyebrow>}
           title={
             <>
               The core
@@ -83,32 +112,22 @@ export function LearningLoop() {
         />
       </motion.div>
 
-      {/* Horizontal timeline (desktop and tablet). */}
+      {/* Horizontal step row (desktop and tablet). */}
       <div
         role="list"
         aria-label="Learning loop steps"
         onKeyDown={handleKey}
         className="mt-14 hidden md:block"
       >
-        <ol className="relative grid grid-cols-7 gap-2">
-          {/* Connector line that highlights up to the active step. */}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute left-[5%] right-[5%] top-9 h-px bg-border"
-          />
-          <span
-            aria-hidden
-            className="pointer-events-none absolute left-[5%] top-9 h-px bg-accent transition-[width] duration-700"
-            style={{
-              width: `calc(${(active / (loopSteps.length - 1)) * 90}%)`,
-            }}
-          />
+        <ol className="grid grid-cols-7 overflow-hidden rounded-2xl border border-border bg-surface-elevated">
           {loopSteps.map((step, i) => {
-            const StepIcon: PhosphorIcon = step.icon;
             const isActive = i === active;
-            const isPast = i < active;
             return (
-              <li key={step.title} role="listitem">
+              <li
+                key={step.title}
+                role="listitem"
+                className="border-r border-border/60 last:border-r-0"
+              >
                 <button
                   ref={(el) => {
                     buttonRefs.current[i] = el;
@@ -119,42 +138,39 @@ export function LearningLoop() {
                   aria-pressed={isActive}
                   aria-controls="loop-detail-panel"
                   className={cn(
-                    "group flex w-full flex-col items-center rounded-2xl border p-4 text-center outline-none transition-all duration-300 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    isActive
-                      ? "-translate-y-1 border-border bg-surface-elevated shadow-[var(--shadow-soft)]"
-                      : "border-border/60 bg-surface-elevated/60 hover:-translate-y-0.5 hover:border-border hover:bg-surface-elevated"
+                    "group flex h-full w-full flex-col items-start gap-2 px-3.5 py-5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    isActive ? "bg-background" : "hover:bg-surface"
                   )}
                 >
                   <span
                     aria-hidden
                     className={cn(
-                      "mb-2 flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] font-semibold ring-1 transition-colors",
+                      "font-mono text-[10.5px] uppercase tracking-[0.14em] transition-colors",
                       isActive
-                        ? "bg-accent text-accent-foreground ring-accent"
-                        : isPast
-                          ? "bg-accent/15 text-accent ring-accent/30"
-                          : "bg-accent/8 text-accent ring-accent/10"
+                        ? "text-foreground"
+                        : "text-muted-foreground group-hover:text-foreground"
                     )}
                   >
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <span
                     className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
-                      isActive ? "bg-accent/15" : "bg-accent/8"
-                    )}
-                  >
-                    <StepIcon weight="duotone" className="h-5 w-5 text-accent" />
-                  </span>
-                  <span
-                    className={cn(
-                      "mt-3 text-[13px] font-semibold tracking-tight",
-                      isActive ? "text-foreground" : "text-foreground/80"
+                      "text-[13.5px] leading-[1.2] tracking-[-0.005em] transition-colors",
+                      isActive
+                        ? "font-medium text-foreground"
+                        : "text-foreground/70 group-hover:text-foreground"
                     )}
                   >
                     {step.title}
                   </span>
-                  <span className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-muted-foreground">
+                  <span
+                    className={cn(
+                      "line-clamp-2 text-[11.5px] leading-snug transition-colors",
+                      isActive
+                        ? "text-muted-foreground"
+                        : "text-muted-foreground/80 group-hover:text-muted-foreground"
+                    )}
+                  >
                     {step.tagline}
                   </span>
                 </button>
@@ -166,70 +182,68 @@ export function LearningLoop() {
         <motion.div
           id="loop-detail-panel"
           key={activeStep.title}
-          initial={reduce ? false : { opacity: 0, y: 14 }}
+          initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
           aria-live="polite"
-          className="mt-6 grid grid-cols-1 gap-4 rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 md:grid-cols-12"
+          className="mt-5 rounded-2xl border border-border bg-surface-elevated p-7 sm:p-8"
         >
-          <div className="md:col-span-8">
-            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-accent">
-              <span>Step {String(active + 1).padStart(2, "0")}</span>
-              <span aria-hidden className="h-px w-3 bg-accent/40" />
-              <span>{activeStep.title}</span>
-            </p>
-            <h3 className="mt-2 text-[22px] font-semibold tracking-tight text-foreground">
-              {activeStep.tagline}
-            </h3>
-            <p className="mt-3 max-w-prose text-[14px] leading-relaxed text-muted-foreground">
-              {activeStep.detail}
-            </p>
-          </div>
-          <div className="md:col-span-4">
-            <div className="relative flex h-full min-h-[180px] items-center justify-center overflow-hidden rounded-xl border border-border bg-surface">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 opacity-[0.4]"
-                style={{
-                  backgroundImage:
-                    "radial-gradient(circle, currentColor 0.4px, transparent 0.4px)",
-                  backgroundSize: "16px 16px",
-                }}
-              />
-              <span className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-accent/10 ring-1 ring-accent/10">
-                <ActiveIcon weight="duotone" className="h-10 w-10 text-accent" />
+          <div className="flex items-center gap-2.5">
+            <ActiveIcon
+              className="h-4 w-4 text-muted-foreground"
+              weight="duotone"
+              aria-hidden
+            />
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="text-foreground">
+                {String(active + 1).padStart(2, "0")}
               </span>
-            </div>
+              <span className="mx-1.5 text-border">/</span>
+              <span>{String(loopSteps.length).padStart(2, "0")}</span>
+              <span className="mx-2.5 text-border" aria-hidden>·</span>
+              <span className="text-foreground/80">{activeStep.title}</span>
+            </p>
           </div>
+          <h3 className="mt-4 max-w-2xl text-[22px] font-semibold leading-[1.18] tracking-[-0.018em] text-foreground">
+            {activeStep.tagline}
+          </h3>
+          <p className="mt-3 max-w-prose text-[14.5px] leading-[1.55] text-muted-foreground">
+            {activeStep.detail}
+          </p>
         </motion.div>
       </div>
 
-      {/* Vertical stack for small screens. */}
+      {/* Vertical list for small screens. */}
       <ol
         role="list"
         aria-label="Learning loop steps"
-        className="mt-12 grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden"
+        className="mt-12 md:hidden"
       >
         {loopSteps.map((step, i) => {
           const StepIcon: PhosphorIcon = step.icon;
           return (
             <li
               key={step.title}
-              className="group flex gap-4 rounded-2xl border border-border bg-surface-elevated p-5"
+              className="grid grid-cols-[auto_1fr] gap-x-4 border-b border-border py-5 last:border-b-0"
             >
-              <div className="flex shrink-0 flex-col items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 font-mono text-[11px] font-semibold text-accent ring-1 ring-accent/10">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10">
-                  <StepIcon className="h-5 w-5 text-accent" weight="duotone" />
-                </span>
-              </div>
+              <span className="pt-0.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                {String(i + 1).padStart(2, "0")}
+              </span>
               <div>
-                <h3 className="text-[15px] font-semibold tracking-tight text-foreground">
-                  {step.title}
-                </h3>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <StepIcon
+                    className="h-4 w-4 text-muted-foreground"
+                    weight="duotone"
+                    aria-hidden
+                  />
+                  <h3 className="text-[15px] font-medium leading-[1.2] tracking-[-0.005em] text-foreground">
+                    {step.title}
+                  </h3>
+                </div>
+                <p className="mt-1 text-[12.5px] leading-[1.55] text-muted-foreground">
+                  {step.tagline}
+                </p>
+                <p className="mt-2 text-[12.5px] leading-[1.55] text-muted-foreground/80">
                   {step.detail}
                 </p>
               </div>

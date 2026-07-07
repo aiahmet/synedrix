@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 
-import { footerLinkColumns, heroStats } from "@/components/landing/data";
+import { footerLinkColumns } from "@/components/landing/data";
 
 /**
  * Footer.
@@ -23,9 +23,9 @@ export function Footer() {
       </h2>
       <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6">
         <div className="grid grid-cols-1 gap-12 sm:grid-cols-12 sm:gap-8">
-          <div className="sm:col-span-6">
+          <div className="sm:col-span-4">
             <div className="inline-flex items-center gap-2.5">
-              <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg">
+              <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-md">
                 <Image
                   src="/synedrix-logo.png"
                   alt=""
@@ -39,34 +39,18 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-5 max-w-md text-[13.5px] leading-relaxed text-muted-foreground">
-              A personal learning operating system. Five systems sharing one
-              state. Open source under the MIT License.
+              Open source under the MIT License. Self-host, fork, or use the
+              hosted instance.
             </p>
-
-            <ul className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {heroStats.map((stat) => (
-                <li
-                  key={stat.caption}
-                  className="rounded-md border border-border bg-surface-elevated px-2.5 py-2"
-                >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                    {stat.caption}
-                  </p>
-                  <p className="mt-1 font-mono text-[15px] font-semibold tabular-nums leading-none text-foreground">
-                    {stat.value}
-                  </p>
-                </li>
-              ))}
-            </ul>
           </div>
 
           <nav
             aria-label="Footer"
-            className="grid grid-cols-2 gap-8 sm:col-span-6 sm:grid-cols-3"
+            className="grid grid-cols-2 gap-8 sm:col-span-8 sm:grid-cols-3"
           >
             {footerLinkColumns.map((column) => (
               <div key={column.heading}>
-                <p className="font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   {column.heading}
                 </p>
                 <ul className="mt-4 flex flex-col gap-2.5">
@@ -82,7 +66,7 @@ export function Footer() {
                             ? "noopener noreferrer"
                             : undefined
                         }
-                        className="text-[13px] text-muted-foreground outline-none transition-colors duration-200 hover:text-foreground focus-visible:text-foreground"
+                        className="rounded-sm text-[13px] text-muted-foreground outline-none transition-colors duration-200 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40"
                       >
                         {link.label}
                       </Link>
@@ -94,22 +78,18 @@ export function Footer() {
           </nav>
         </div>
 
-        <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-border pt-6 text-[12px] text-muted-foreground sm:flex-row sm:items-center">
+        <div className="mt-12 border-t border-border pt-6 text-[12px] text-muted-foreground">
           <p>
-            Built with obsession for the perfect study session. Synedrix by{" "}
+            Synedrix by{" "}
             <a
               href="https://github.com/aiahmet"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-foreground outline-none transition-colors hover:text-accent focus-visible:text-accent"
+              className="rounded-sm font-medium text-foreground outline-none transition-colors hover:text-accent focus-visible:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40"
             >
               Ahmet Cetin
             </a>
-            .
-          </p>
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.14em]">
-            Released under the MIT License. Built with Convex, Clerk,
-            OpenRouter.
+            · MIT License.
           </p>
         </div>
       </div>

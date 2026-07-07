@@ -30,7 +30,7 @@ export default async function SignUpPage() {
       form={
         <AuthFormCard
           title="Create your account"
-          description="Start mastering every subject with the AI-powered study OS."
+          description="Free during beta. No credit card. Cancel any time."
         >
           <SignUp
             forceRedirectUrl="/dashboard"

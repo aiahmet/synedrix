@@ -312,6 +312,21 @@ html {
 }
 
 /*
+ * Tutor composer textarea auto-sizing. Uses the
+ * modern `field-sizing: content` CSS property so the
+ * textarea grows to fit its content up to the cap set
+ * by `max-height`. Falls back to the rows-attribute
+ * rendering on browsers without `field-sizing` (Safari
+ * < 17.4, Chromium < 123). The internal overflow
+ * scroll handles longer content.
+ */
+.composer-textarea {
+  field-sizing: content;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+/*
  * Tutor shell utility classes.
  *
  * Custom utilities introduced by the AI Copilot

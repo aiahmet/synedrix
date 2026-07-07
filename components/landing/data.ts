@@ -69,12 +69,9 @@ export interface ProblemPillar {
 
 export interface Surface {
   readonly title: string;
-  readonly summary: string;
   readonly description: string;
-  readonly highlight: string;
   readonly icon: PhosphorIcon;
   readonly span: string;
-  readonly imageQuery?: string;
   readonly isHero?: boolean;
 }
 
@@ -98,6 +95,18 @@ export interface Subject {
 
 export interface ArchitectureCard {
   readonly tag: string;
+  /**
+   * Source path shown in the code-block header. Lives in the data
+   * layer (not derived from `tag`) so renaming the tag never silently
+   * breaks the displayed filename.
+   */
+  readonly filename: string;
+  /**
+   * Short functional label for the code-block header, parallel to a
+   * macOS window role label ("read + write", "stream"). Same
+   * decoupling rationale as `filename`.
+   */
+  readonly codeMeta: string;
   readonly title: string;
   readonly description: string;
   readonly entities: readonly string[];
@@ -123,6 +132,7 @@ export interface TechStackItem {
   readonly category: string;
   readonly description: string;
   readonly capability: string;
+  readonly toolName: string;
 }
 
 export interface InstallStep {
@@ -213,84 +223,65 @@ export const problemPillars: readonly ProblemPillar[] = [
 export const surfaces: readonly Surface[] = [
   {
     title: "The Cockpit",
-    summary: "Dashboard",
     description:
       "Answers the only question that matters each morning: what do I do right now. Daily mission, weak topics, AI curation, review queue, recent mistakes, and the weekly consistency graph in under a second.",
-    highlight: "Command center",
     icon: Compass,
-    span: "md:col-span-2 md:row-span-2",
-    imageQuery: "cockpit",
+    span: "md:col-span-4",
     isHero: true,
   },
   {
     title: "Subject Hubs",
-    summary: "Math, Physics, Languages",
     description:
       "Tailored workflows per subject. Math ships a hint ladder. Physics decomposes units. French runs rubric-based writing drills. One layout trunk, six subject-tuned branches.",
-    highlight: "6 subjects",
     icon: Books,
     span: "md:col-span-2",
   },
   {
     title: "Topic Pages",
-    summary: "Atomic learning screen",
     description:
       "Three depths of explanation on one page. Inline annotation, worked examples, a common-mistakes panel, and an AI sidecar that already knows the topic, your mastery, and your recent mistakes.",
-    highlight: "Learn",
     icon: GraduationCap,
     span: "md:col-span-2",
   },
   {
     title: "Tutor Workspace",
-    summary: "Context-aware AI",
     description:
       "Modes ship preconfigured: explain simply, hint only, quiz me, Socratic, check my answer, summarize for revision. Quote any block into a prompt. Session memory scoped to the topic, not a global profile.",
-    highlight: "Ask",
     icon: ChatCircleText,
     span: "md:col-span-2",
   },
   {
     title: "Practice Arena",
-    summary: "On-demand drills",
     description:
       "MCQ, step-by-step problems, fill-in-the-blank, formulas, oral recall, translations, essay drills. Generate a fresh set, retry only what was wrong, mix topics for exam simulation, run timed.",
-    highlight: "Drill",
     icon: Target,
     span: "md:col-span-2",
   },
   {
     title: "Review Center",
-    summary: "Spaced repetition",
     description:
       "One unified queue: due today, weak-foundations recovery, mistake-log replay, formula packs, language decks. An AI rescue plan when many things are overdue at once. No scattered decks.",
-    highlight: "Retain",
     icon: ClockCounterClockwise,
     span: "md:col-span-2",
   },
   {
     title: "Focus Mode",
-    summary: "Deep work",
     description:
       "Hides navigation, pins the current goal, surfaces a calm timer, and captures a one-line reflection at the end. The interface disappears while you work.",
-    highlight: "Distraction-free",
     icon: Crosshair,
     span: "md:col-span-2",
   },
   {
     title: "Mistake Journal",
-    summary: "The standout feature",
     description:
       "Every mistake is classified by concept and cause, linked to the topic and the practice attempt, and scheduled for review. Recurring patterns become the inputs that retrain the tutor.",
-    highlight: "Recover",
     icon: Notepad,
     span: "md:col-span-2",
   },
   {
     title: "Planner",
-    summary: "Goals + sessions",
     description:
       "Daily and weekly goals, subject-level time targets, session templates for Monday-style routines. Recovery plans after missed days, not guilt trips. Auto-generated next step at the close of every session.",
-    highlight: "Plan",
     icon: Timer,
     span: "md:col-span-2",
   },
@@ -432,6 +423,8 @@ export const subjects: readonly Subject[] = [
 export const architectureCards: readonly ArchitectureCard[] = [
   {
     tag: "Data modeling",
+    filename: "convex/queries.ts",
+    codeMeta: "read + write",
     title: "Canonical data stays separate from per-user progress",
     description:
       "Subject, Chapter, Topic, and LessonBlock are canonical, read-heavy, and aggressively cached. UserTopicProgress, PracticeAttempt, and MistakeEntry are per-user, write-heavy, and realtime. The two never share a table.",
@@ -477,6 +470,8 @@ export const recordAttempt = mutation({
   },
   {
     tag: "AI guardrails",
+    filename: "lib/ai/quiz.ts",
+    codeMeta: "streaming",
     title: "Every generation is structured, validated, and logged",
     description:
       "Every prompt runs through the Vercel AI SDK with a Zod schema. Token usage, latency, and schema-validation outcomes become a row in AiGeneration. Never trust raw LLM text for structured data.",
@@ -619,48 +614,56 @@ export const techStack: readonly TechStackItem[] = [
     description:
       "Next.js 16, App Router, React Server Components, the explicit caching model with use cache, cacheTag, cacheLife. proxy.ts for routing.",
     capability: "ship",
+    toolName: "Next.js 16",
   },
   {
     category: "Database",
     description:
       "Convex, realtime queries, server functions, automatic TypeScript end-to-end type safety. Schema defined in convex/schema.ts. Auth wired via convex/react-clerk.",
     capability: "store",
+    toolName: "Convex",
   },
   {
     category: "Styling",
     description:
       "Tailwind CSS v4 with CSS-first @theme configuration. No tailwind.config.js to maintain. Design tokens are CSS variables shared with the future app shell.",
     capability: "compose",
+    toolName: "Tailwind CSS v4",
   },
   {
     category: "AI Engine",
     description:
       "Vercel AI SDK routed through OpenRouter. generateObject and streamObject with Zod schemas. Telemetry layer wraps every call and writes an AiGeneration row.",
     capability: "generate",
+    toolName: "Vercel AI SDK",
   },
   {
     category: "Authentication",
     description:
       "Clerk for managed auth, JWT, OAuth, MFA, passkeys, webhooks. Integrated into Convex through convex/react-clerk. Clerk middleware in proxy.ts as the first-pass redirect.",
     capability: "authenticate",
+    toolName: "Clerk",
   },
   {
     category: "State",
     description:
       "TanStack Query for server state, Zustand for local UI, React Hook Form plus Zod for forms. URL state for filters and selected topic. Optimistic updates on review actions.",
     capability: "coordinate",
+    toolName: "TanStack Query",
   },
   {
     category: "Editors",
     description:
       "MDX for authored lessons, TipTap for notes, KaTeX for formula rendering, Mermaid later for diagrams. Content authoring stays separate from AI generation pipelines.",
     capability: "compose",
+    toolName: "MDX + TipTap",
   },
   {
     category: "Observability",
     description:
       "PostHog for product analytics, Sentry for error tracking, the AiGeneration table for AI telemetry. OpenTelemetry-friendly logging on the server.",
     capability: "observe",
+    toolName: "PostHog + Sentry",
   },
 ] as const;
 
@@ -762,32 +765,32 @@ export const faqItems: readonly FaqItem[] = [
   {
     question: "Is this ready for multiple students or classrooms?",
     answer:
-      "Not in v1. Single-user only. The role model in the schema future-proofs for ParentObserver, Tutor, and Admin roles, but the auth, billing, and class-shell UI are not built yet.",
+      "Not in v1. Single-user only. The schema has roles for ParentObserver, Tutor, and Admin future-proofed, but auth, billing, and the class shell are not built yet.",
   },
   {
     question: "What models does the AI tutor actually use?",
     answer:
-      "OpenRouter routes per task. Faster models for chat, stronger reasoning models for explanation mode, low-cost fast models for flashcards and summaries, language-strong models for French and German writing feedback. The mapping lives in src/lib/ai/models.ts.",
+      "OpenRouter routes per task: fast models for chat, stronger reasoning models for explanations, low-cost models for flashcards and summaries, language-strong models for French and German writing feedback. The mapping is in src/lib/ai/models.ts.",
   },
   {
     question: "How does the spaced repetition schedule?",
     answer:
-      "Per-card ease, interval, and last result at FlashcardReview. Items you struggle with return tomorrow, mastered items fade into maintenance rotation. Mistake entries carry their own reviewAt so the journal and the cards share one queue.",
+      "Per-card ease, interval, and last result at FlashcardReview. Struggled items return tomorrow, mastered items fade into maintenance. Mistake entries carry their own reviewAt so the journal and the cards share one queue.",
   },
   {
     question: "Why not just use Anki or Quizlet?",
     answer:
-      "Anki and Quizlet do not know what the AI tutor just explained or what the practice engine just tested. They have no concept of mastery in the topic, no mistake journal, no rubric-graded writing feedback. Synedrix is the system they would live inside.",
+      "They do not know what the AI tutor just explained or what the practice engine just tested. No concept of mastery, no mistake journal, no rubric-graded writing feedback. Synedrix is the system they would live inside.",
   },
   {
     question: "Does it work for languages other than German?",
     answer:
-      "Yes. French, German, and English each have subject-specific workflows. Writing feedback runs through a rubric-aware model on language output. Explain-this-in-simpler-French is a standing tutor mode for French.",
+      "Yes. French, German, and English each have subject-specific workflows. Writing feedback runs through a rubric-aware model. Explain-this-in-simpler-French is a standing tutor mode.",
   },
   {
     question: "Can I self-host it?",
     answer:
-      "Convex and Clerk are managed services today, so a true self-host requires swapping both. The rest of the stack, Next.js, Convex schema, AI routing, runs on your own infrastructure with environment changes only.",
+      "Convex and Clerk are managed services, so a true self-host requires swapping both. The rest of the stack runs on your own infrastructure with environment changes only.",
   },
   {
     question: "Where does my data live?",
@@ -797,7 +800,7 @@ export const faqItems: readonly FaqItem[] = [
   {
     question: "How do I contribute?",
     answer:
-      "Fork, branch, commit with a conventional commit message, and open a pull request. Bug fixes ship fast. New features ship in conversation first. AI prompting changes need to ship with an AiGeneration row proving schema validation still passes.",
+      "Fork, branch, commit with a conventional commit message, and open a pull request. Bug fixes ship fast. New features ship in conversation first. AI prompting changes need an AiGeneration row proving schema validation still passes.",
   },
 ] as const;
 
@@ -837,17 +840,6 @@ export const footerLinkColumns: readonly {
       { label: "MIT license", href: "https://github.com/aiahmet/synedrix/blob/main/LICENSE" },
     ],
   },
-] as const;
-
-// ---------------------------------------------------------------------------
-// Hero stats: derived from the spec, not invented SLAs.
-// ---------------------------------------------------------------------------
-
-export const heroStats: readonly { readonly value: string; readonly caption: string }[] = [
-  { value: "7", caption: "Steps in the learning loop" },
-  { value: "19", caption: "Tables in the canonical schema" },
-  { value: "6", caption: "Subject workflows shipped" },
-  { value: "3", caption: "Depths per topic explanation" },
 ] as const;
 
 // ---------------------------------------------------------------------------

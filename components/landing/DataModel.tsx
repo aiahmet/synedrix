@@ -9,22 +9,13 @@ import { dataEntities } from "@/components/landing/data";
 
 const TIER_LABEL: Record<typeof dataEntities[number]["tier"], string> = {
   canonical: "Canonical",
-  progress: "Per-user progress",
+  progress: "Progress",
   telemetry: "Telemetry",
-};
-
-const TIER_TONE: Record<typeof dataEntities[number]["tier"], string> = {
-  canonical:
-    "border-accent-border/60 bg-accent-subtle/40 text-accent",
-  progress:
-    "border-subject-physics/30 bg-subject-physics/10 text-subject-physics",
-  telemetry:
-    "border-subject-math/30 bg-subject-math/10 text-subject-math",
 };
 
 type FilterId = "all" | typeof dataEntities[number]["tier"];
 const FILTERS: readonly { readonly id: FilterId; readonly label: string }[] = [
-  { id: "all", label: "All entities" },
+  { id: "all", label: "All tiers" },
   { id: "canonical", label: "Canonical" },
   { id: "progress", label: "Progress" },
   { id: "telemetry", label: "Telemetry" },
@@ -34,13 +25,20 @@ const FILTERS: readonly { readonly id: FilterId; readonly label: string }[] = [
  * Data model section.
  *
  * The single most important architectural decision in the app is the
- * split between canonical curriculum data and per-user progress.
- * We expose that decision as a filterable table of the real entity
- * list pulled directly from the spec, so the visitor can see the
- * shape of what the system actually stores.
+ * strict split between canonical curriculum data and per-user progress.
+ * We expose the entity list as a real spec table, not a card grid:
  *
- * The filter is a controlled state with explicit tab semantics. Reduced
- * motion users skip the staggered reveal of the cards.
+ *   - One row per table. Hairline divider between rows.
+ *   - Mono entity name, plain uppercase tier label, prose purpose.
+ *   - No carded rows, no pill tier chips, no nested chrome.
+ *
+ * The tier filter is an inline text-link control, not a button. The
+ * active state is the underline + foreground text; a filled pill
+ * would compete with the table rows for visual weight.
+ *
+ * The per-row tier label is kept on single-tier filters for stable
+ * table structure. The redundancy is a deliberate trade for column
+ * consistency.
  */
 export function DataModel() {
   const reduce = useReducedMotion() ?? false;
@@ -57,91 +55,102 @@ export function DataModel() {
       ariaLabelledBy="data-model-title"
       className="py-24 sm:py-32"
     >
-      <motion.div
-        initial={reduce ? false : { opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.4 }}
-        transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <SectionHeading
-          titleId="data-model-title"
-          title={
-            <>
-              Thirteen tables, one
-              <br />
-              strict split.
-            </>
-          }
-          description={
-            <>
-              Canonical curriculum content never shares a table with the
-              per-user progress tables. AiGeneration telemetry sits in its
-              own tier so the AI pipeline can be debugged independently
-              from user state. Filter by tier to see what lives where.
-            </>
-          }
-        />
-      </motion.div>
+      <SectionHeading
+        titleId="data-model-title"
+        eyebrow={
+          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            Data model
+          </span>
+        }
+        title={
+          <>
+            Thirteen tables.
+            <br />
+            One strict split.
+          </>
+        }
+        description={
+          <>
+            Canonical curriculum content never shares a table with
+            per-user progress. AI generation telemetry sits in its
+            own tier so the AI pipeline can be debugged independently
+            from user state.
+          </>
+        }
+      />
 
-      <div
-        role="tablist"
-        aria-label="Filter by tier"
-        className="mt-10 inline-flex flex-wrap items-center gap-1 rounded-full border border-border bg-surface p-1"
-      >
-        {FILTERS.map((f) => {
-          const active = f.id === filter;
-          return (
-            <button
-              key={f.id}
-              role="tab"
-              aria-selected={active}
-              type="button"
-              onClick={() => setFilter(f.id)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                active
-                  ? "bg-surface-elevated text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {f.label}
-            </button>
-          );
-        })}
+      <div className="mt-10 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-3 border-b border-border pb-4">
+        <div
+          role="radiogroup"
+          aria-label="Filter by tier"
+          className="flex flex-wrap items-baseline gap-x-5 gap-y-2"
+        >
+          <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
+            Tier
+          </span>
+          {FILTERS.map((f) => {
+            const active = f.id === filter;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setFilter(f.id)}
+                // `py-1` grows the tap target above the 24x24 WCAG AA
+                // minimum without adding visible chrome.
+                className={cn(
+                  "border-b py-1 text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/40",
+                  active
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="font-mono text-[11.5px] text-muted-foreground/80">
+          {visible.length} of {dataEntities.length} tables
+        </p>
       </div>
 
-      <ul className="mt-8 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {visible.map((entity, i) => (
-          <motion.li
-            key={entity.name}
-            initial={reduce ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.4,
-              delay: i * 0.04,
-              ease: [0.16, 1, 0.3, 1],
-            }}
-            className="group flex items-start gap-3 rounded-xl border border-border bg-surface-elevated p-4 transition-colors duration-200 hover:border-border/70"
-          >
-            <span
-              className={cn(
-                "mt-0.5 inline-flex h-6 items-center rounded-md border px-2 font-mono text-[9.5px] font-medium uppercase tracking-[0.1em]",
-                TIER_TONE[entity.tier]
-              )}
-            >
-              {TIER_LABEL[entity.tier]}
-            </span>
-            <div className="min-w-0">
-              <p className="font-mono text-[13.5px] font-medium text-foreground">
-                {entity.name}
-              </p>
-              <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
-                {entity.purpose}
-              </p>
-            </div>
-          </motion.li>
-        ))}
-      </ul>
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <ul role="list" className="divide-y divide-border">
+          {visible.map((entity) => (
+            <EntityRow key={entity.name} entity={entity} />
+          ))}
+        </ul>
+      </motion.div>
     </Section>
+  );
+}
+
+function EntityRow({
+  entity,
+}: {
+  readonly entity: (typeof dataEntities)[number];
+}) {
+  return (
+    // Mobile: name + tier share row 1 (auto + 1fr), purpose spans the
+    // full width on row 2. Desktop: the 3-column grid takes over and
+    // `sm:col-span-1` collapses the purpose back to a single column.
+    <li className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 py-4 sm:grid-cols-[10rem_7.5rem_1fr] sm:gap-x-6 sm:gap-y-0 sm:py-3.5">
+      <p className="font-mono text-[13px] font-medium tracking-[-0.005em] text-foreground">
+        {entity.name}
+      </p>
+      <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
+        {TIER_LABEL[entity.tier]}
+      </p>
+      <p className="col-span-2 text-[13px] leading-[1.55] text-muted-foreground sm:col-span-1">
+        {entity.purpose}
+      </p>
+    </li>
   );
 }

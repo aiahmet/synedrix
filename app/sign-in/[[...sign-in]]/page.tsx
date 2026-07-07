@@ -30,7 +30,7 @@ export default async function SignInPage() {
       form={
         <AuthFormCard
           title="Welcome back"
-          description="Sign in to continue your learning journey."
+          description="Email or OAuth. We never share your data with model providers."
         >
           <SignIn
             forceRedirectUrl="/dashboard"

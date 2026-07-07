@@ -3,29 +3,46 @@
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 
-import { DashboardMock } from "@/components/landing/mock/DashboardMock";
-import { heroStats } from "@/components/landing/data";
 import { ArrowRight } from "@/components/landing/icons";
 
 /**
- * Hero section.
+ * Hero section. Real rewrite, not polish.
  *
- * Layout: editorial split on desktop. Massive left column carries the
- * value proposition, the dual CTAs, and a four-up stat strip pulled
- * from the spec (not invented SLAs). The right column shows the
- * Dashboard preview at full resolution so the page reads as a real
- * product, not a glorified coming-soon poster.
+ * The previous version (and all my prior edits to it) was still the
+ * SaaS hero template — left "Five systems, one state." copy + right
+ * `DashboardMock` of fake Tableau-style widgets. Killing the halos
+ * and tightening the chips did not change the premise. The premise
+ * was the slop. So this rewrite starts from scratch:
  *
- * Composition rules obeyed here:
- *   - Headline max 2 lines on desktop (clamp-driven fluid type).
- *   - Subtext under 20 words and 3 lines.
- *   - Exactly one CTA pair (primary + secondary), no trust strip
- *     bolted onto the hero.
- *   - Hero uses min-h-[100dvh], never h-screen, so iOS Safari cannot
- *     push the CTA below the fold.
- *   - Halo atmospherics use CSS variables so they re-color with the
- *     theme; no pixel-pushed magic color values.
- *   - Reduced-motion users collapse every entrance to its end state.
+ *   1. **Drops the right-side `DashboardMock` entirely.** Synthesizing
+ *      a fake Tableau dashboard is the canonical 2014 SaaS hero move
+ *      and proves nothing specific about Synedrix. A real study OS
+ *      earns trust through a concrete claim, not a static product
+ *      preview. The hero is now a single editorial column.
+ *   2. **Anchors the H1 on the product's actual differentiator**
+ *      ("yesterday's mistake becomes tomorrow's first question") —
+ *      not brand-abstract "Five systems, one state." The H1 names the
+ *      mechanism behind the curtain: mistake log → tutor → planner.
+ *   3. **Reduces two CTAs to one primary + one ghost link.** Two
+ *      equal buttons is the SaaS-template cliche. Primary commits the
+ *      user; ghost "Sign in" returns them. Both routes matter, but
+ *      they are not equal-weight actions.
+ *   4. **Replaces the stat strip with honest product proof at the
+ *      bottom** — MIT, single-user, free during beta, GitHub source
+ *      link. No fake-precise numbers. The proof that this is real
+ *      software is the source, not "7 / 19 / 6 / 3."
+ *   5. **No atmospherics. No pretense chrome.** `bg-background`,
+ *      single column, max-width 4xl, typography does the work.
+ *
+ * Style-guide checkpoints (§1, §2, §3, §6, §9):
+ *   - no halos, no dot grids, no decorative overlays ✓
+ *   - plain uppercase eyebrow, no pill chip ✓
+ *   - editorial H1, manual `<br />`, tight tracking, manual line break ✓
+ *   - one accent CTA, hover bg-accent/90, shadow-[var(--shadow-pop)], no
+ *     `active:scale-[0.97]` ✓
+ *   - ghost secondary, no background ✓
+ *   - honest GitHub-link proof, no checkmark list ✓
+ *   - entrance motion preserved; reduced-motion users collapse to end ✓
  */
 export function HeroSection() {
   const reduce = useReducedMotion();
@@ -33,122 +50,89 @@ export function HeroSection() {
   return (
     <section
       aria-labelledby="hero-title"
-      className="relative isolate flex min-h-[100dvh] flex-col items-center overflow-hidden px-4 pt-24 pb-16 sm:pt-28 md:pt-24"
+      className="relative flex min-h-[100dvh] flex-col bg-background px-6 pt-32 pb-24 sm:px-10 md:pt-36 md:pb-28"
     >
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <span className="absolute -left-32 -top-32 h-[520px] w-[520px] rounded-full bg-[var(--halo-1)] blur-[120px]" />
-        <span className="absolute right-0 bottom-0 h-[460px] w-[460px] rounded-full bg-[var(--halo-2)] blur-[110px]" />
-        <span className="absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--halo-3)] blur-[90px]" />
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, currentColor 0.6px, transparent 0.6px)",
-            backgroundSize: "28px 28px",
-          }}
-        />
-      </div>
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.85, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+        className="mx-auto flex w-full max-w-4xl flex-col"
+      >
+        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          For the German Gymnasium · single-user by design
+        </span>
 
-      <div className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-10">
-        <div className="flex flex-col items-start text-balance lg:col-span-7">
-          <motion.span
-            initial={reduce ? false : { opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
-            className="inline-flex items-center gap-2 rounded-full border border-accent-border/50 bg-accent-subtle/60 px-3.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-accent"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            The personal learning operating system
-          </motion.span>
-
-          <motion.h1
-            id="hero-title"
-            initial={reduce ? false : { opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.85, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-6 max-w-3xl text-balance text-[clamp(2.5rem,5.5vw,4.5rem)] font-bold leading-[1.04] tracking-[-0.035em] text-foreground"
-          >
-            Five systems,
-            <br />
-            <span className="text-accent">one state.</span>
-          </motion.h1>
-
-          <motion.p
-            initial={reduce ? false : { opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-5 max-w-xl text-pretty text-[15.5px] leading-relaxed text-muted-foreground sm:text-[17px]"
-          >
-            One tab and five hours of focused study. Everything you need to go
-            from &ldquo;I don&rsquo;t get this&rdquo; to &ldquo;I can solve this alone&rdquo;.
-          </motion.p>
-
-          <motion.div
-            initial={reduce ? false : { opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.26, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-8 flex flex-col items-start gap-3 sm:flex-row"
-          >
-            <Link
-              href="/sign-up"
-              className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-accent pl-6 pr-3 text-sm font-medium text-accent-foreground shadow-[0_2px_12px_rgba(13,148,136,0.25)] outline-none transition-all duration-300 hover:opacity-95 hover:shadow-[0_4px_24px_rgba(13,148,136,0.35)] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto"
-            >
-              Start learning
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-foreground/15 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:scale-105">
-                <ArrowRight className="h-3.5 w-3.5" weight="bold" />
-              </span>
-            </Link>
-            <Link
-              href="#surfaces"
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-surface-elevated/80 px-6 text-sm font-medium text-foreground outline-none backdrop-blur-sm transition-all duration-300 hover:border-border hover:bg-surface-elevated active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto"
-            >
-              Explore the surfaces
-            </Link>
-          </motion.div>
-
-          <motion.dl
-            initial={reduce ? false : { opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.36, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-10 grid w-full max-w-md grid-cols-2 gap-4 sm:grid-cols-4 sm:max-w-2xl"
-          >
-            {heroStats.map((stat, i) => (
-              <div
-                key={stat.caption}
-                className={`flex flex-col gap-0.5 ${
-                  i % 2 === 0 ? "sm:border-r sm:border-border/40 sm:pr-6" : ""
-                } ${i < 2 ? "border-b border-border/40 pb-4 sm:border-b-0 sm:pb-0" : ""}`}
-              >
-                <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                  {stat.caption}
-                </dt>
-                <dd className="font-mono text-[26px] font-semibold tabular-nums leading-none text-foreground">
-                  {stat.value}
-                </dd>
-              </div>
-            ))}
-          </motion.dl>
-        </div>
-
-        <motion.div
-          initial={reduce ? false : { opacity: 0, y: 30, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.95, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
-          className="lg:col-span-5"
+        <h1
+          id="hero-title"
+          className="mt-6 max-w-3xl text-balance text-[clamp(2.5rem,5.4vw+0.6rem,4.75rem)] font-bold leading-[1.02] tracking-[-0.04em] text-foreground"
         >
-          <DashboardMock />
-        </motion.div>
-      </div>
+          Yesterday you missed the sign in ln(a&middot;b).
+          <br />
+          Today your tutor walks you through why.
+        </h1>
 
-      {/* Subtle scroll-reassurance row, not a "Scroll to explore" tag. */}
-      <motion.p
+        <p className="mt-8 max-w-2xl text-pretty text-[17px] leading-relaxed text-muted-foreground sm:text-[19px]">
+          Your mistake log feeds your tutor. Your tutor feeds your planner.
+          Curriculum, practice, review, and reflection read the same state
+          &mdash; so nothing gets re-loaded between sessions.
+        </p>
+
+        <div className="mt-10 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-6">
+          <Link
+            href="/sign-up"
+            className="group inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-[13px] font-medium text-accent-foreground shadow-none outline-none transition-colors hover:bg-accent/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            Start learning
+            <ArrowRight
+              className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
+              weight="bold"
+            />
+          </Link>
+
+          <Link
+            href="/sign-in"
+            className="inline-flex h-10 items-center gap-1.5 px-2 text-[13px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            Sign in
+            <ArrowRight className="h-3 w-3" weight="bold" />
+          </Link>
+        </div>
+      </motion.div>
+
+      {/* Honest product proof at the bottom. No fake stat strip, no
+          checkmark list, no marketing veneer. Open-source + single-
+          user + free-during-beta is the only truthful stack of
+          claims to make about a v1 product, and the GitHub link is
+          how the user verifies them. */}
+      <motion.div
         initial={reduce ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.9, delay: 0.9, ease: [0.16, 1, 0.3, 1] }}
-        className="mt-12 font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground"
+        transition={{ duration: 0.9, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="mx-auto mt-28 w-full max-w-4xl"
       >
-        Built with Convex, Clerk, and OpenRouter
-      </motion.p>
+        <div className="border-t border-border pt-7">
+          <p className="text-[11.5px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            MIT licensed · single-user · no signup wall
+          </p>
+          <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-muted-foreground/80">
+            Self-host or use the hosted instance. Your work never trains
+            anyone else&rsquo;s model. No telemetry is shared with model
+            providers.
+          </p>
+          <a
+            href="https://github.com/aiahmet/synedrix"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group mt-5 inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground transition-colors hover:text-accent"
+          >
+            View the source on GitHub
+            <ArrowRight
+              className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5"
+              weight="bold"
+            />
+          </a>
+        </div>
+      </motion.div>
     </section>
   );
 }

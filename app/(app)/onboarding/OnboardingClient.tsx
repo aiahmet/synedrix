@@ -661,7 +661,7 @@ function BuildingErrorState({
       <button
         type="button"
         onClick={onRetry}
-        className="group inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-medium text-accent-foreground transition-all hover:opacity-95 active:scale-[0.98]"
+        className="group inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-[13.5px] font-medium text-accent-foreground transition-colors hover:bg-accent/90"
       >
         Retry
         <ArrowRight

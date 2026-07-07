@@ -39,11 +39,27 @@ const MISTAKES: readonly string[] = [
   "Mixed change-of-base bases",
 ];
 
-export function TopicMock({ className }: { className?: string }) {
+/**
+ * `bare` strips the outer card chrome (border, rounded, surface
+ * background, shadow, padding) so the bento cell can supply the
+ * single-layer chrome per the style guide's "single-layer card"
+ * rule. The internal sub-cards (depth tabs, explanation block,
+ * AI sidecar) keep their own borders because those are nested
+ * within a single surface, not double-stacked against the parent.
+ */
+export function TopicMock({
+  className,
+  bare = false,
+}: {
+  readonly className?: string;
+  readonly bare?: boolean;
+}) {
   return (
     <div
       className={cn(
-        "relative isolate flex flex-col gap-3 overflow-hidden rounded-3xl border border-border bg-surface-elevated p-5 shadow-[var(--shadow-pop)]",
+        bare
+          ? "flex flex-col gap-3"
+          : "relative isolate flex flex-col gap-3 overflow-hidden rounded-3xl border border-border bg-surface-elevated p-5 shadow-[var(--shadow-pop)]",
         className
       )}
     >

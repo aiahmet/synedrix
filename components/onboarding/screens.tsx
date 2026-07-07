@@ -986,7 +986,7 @@ function SubjectOption({
       onClick={onToggle}
       disabled={disabled}
       aria-pressed={selected}
-      className="group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border bg-surface-elevated p-4 pl-6 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] active:translate-y-0 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none sm:p-4.5 sm:pl-7"
+      className="group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border bg-surface-elevated p-4 pl-6 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none sm:p-4.5 sm:pl-7"
       style={{
         borderColor: selected ? accent : undefined,
         backgroundColor: selected
